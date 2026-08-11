@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-main: #FAFAF8;
+    --bg-surface: #FFFFFF;
+    --text-primary: #111111;
+    --text-secondary: #666666;
+    --border-main: #E8E8E8;
+    --accent-main: #1E3E62;
+    --accent-hover: #142B44;
+    --accent-light: #F0F4F8;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.08);
+    --shadow-lg: 0 16px 48px rgba(0,0,0,0.10);
+    --radius-card: 12px;
+    --radius-button: 10px;
+    --radius-input: 10px;
+    color-scheme: light;
+  }
+
+  .dark {
+    --bg-main: #121211;
+    --bg-surface: #1A1A18;
+    --text-primary: #ECECEC;
+    --text-secondary: #999999;
+    --border-main: #2A2A28;
+    --accent-main: #3B82F6;
+    --accent-hover: #60A5FA;
+    --accent-light: #1E293B;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.3);
+    --shadow-lg: 0 16px 48px rgba(0,0,0,0.4);
+    color-scheme: dark;
+  }
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-main);
+}
+
+.font-serif-reading {
+  font-family: 'Newsreader', Georgia, Cambria, serif;
+  line-height: 1.75;
+}
+
+.font-sans-ui {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.5;
+}
+
+/* Custom scrollbar for quiet aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.4);
+}
+

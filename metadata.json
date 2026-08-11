@@ -1,0 +1,6 @@
+{
+  "name": "Personal Publishing Platform",
+  "description": "A quiet, writing-first personal blogging platform with a secure admin panel, rich text editor, article organization, and public reader experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
