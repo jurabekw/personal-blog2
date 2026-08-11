@@ -17,6 +17,30 @@ const getHeaders = (isProtected = false) => {
   return headers;
 };
 
+async function handleResponse<T>(res: Response, defaultError = 'Request failed'): Promise<T> {
+  if (!res.ok) {
+    let message = defaultError;
+    try {
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const err = await res.json();
+        message = err.error || err.message || defaultError;
+      } else {
+        const text = await res.text();
+        if (text && text.length > 0 && text.length < 200) {
+          message = text;
+        } else {
+          message = `Server error (${res.status}). Please try again.`;
+        }
+      }
+    } catch {
+      message = `Server error (${res.status}). Please try again.`;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 export const api = {
   // Posts
   async getPosts(params?: { status?: string; category?: string; tag?: string; search?: string; featured?: boolean }): Promise<Post[]> {
@@ -28,14 +52,12 @@ export const api = {
     if (params?.featured) query.append('featured', 'true');
 
     const res = await fetch(`/api/posts?${query.toString()}`);
-    if (!res.ok) throw new Error('Failed to fetch posts');
-    return res.json();
+    return handleResponse<Post[]>(res, 'Failed to fetch posts');
   },
 
   async getPostBySlugOrId(idOrSlug: string, incrementView = false): Promise<Post> {
     const res = await fetch(`/api/posts/${idOrSlug}?incrementView=${incrementView}`);
-    if (!res.ok) throw new Error('Post not found');
-    return res.json();
+    return handleResponse<Post>(res, 'Post not found');
   },
 
   async createPost(post: Partial<Post>): Promise<Post> {
@@ -44,11 +66,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify(post),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to create post');
-    }
-    return res.json();
+    return handleResponse<Post>(res, 'Failed to create post');
   },
 
   async updatePost(id: string, post: Partial<Post>): Promise<Post> {
@@ -57,11 +75,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify(post),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update post');
-    }
-    return res.json();
+    return handleResponse<Post>(res, 'Failed to update post');
   },
 
   async deletePost(id: string): Promise<void> {
@@ -69,14 +83,13 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders(true),
     });
-    if (!res.ok) throw new Error('Failed to delete post');
+    await handleResponse<{ success: boolean }>(res, 'Failed to delete post');
   },
 
   // Categories & Tags
   async getCategories(): Promise<Category[]> {
     const res = await fetch('/api/categories');
-    if (!res.ok) throw new Error('Failed to fetch categories');
-    return res.json();
+    return handleResponse<Category[]>(res, 'Failed to fetch categories');
   },
 
   async createCategory(category: { name: string; description?: string }): Promise<Category> {
@@ -85,8 +98,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify(category),
     });
-    if (!res.ok) throw new Error('Failed to create category');
-    return res.json();
+    return handleResponse<Category>(res, 'Failed to create category');
   },
 
   async updateCategory(id: string, category: { name: string; description?: string }): Promise<Category> {
@@ -95,8 +107,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify(category),
     });
-    if (!res.ok) throw new Error('Failed to update category');
-    return res.json();
+    return handleResponse<Category>(res, 'Failed to update category');
   },
 
   async deleteCategory(id: string): Promise<void> {
@@ -104,20 +115,18 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders(true),
     });
-    if (!res.ok) throw new Error('Failed to delete category');
+    await handleResponse<{ success: boolean }>(res, 'Failed to delete category');
   },
 
   async getTags(): Promise<Tag[]> {
     const res = await fetch('/api/tags');
-    if (!res.ok) throw new Error('Failed to fetch tags');
-    return res.json();
+    return handleResponse<Tag[]>(res, 'Failed to fetch tags');
   },
 
   // Media
   async getMedia(): Promise<MediaItem[]> {
     const res = await fetch('/api/media');
-    if (!res.ok) throw new Error('Failed to fetch media');
-    return res.json();
+    return handleResponse<MediaItem[]>(res, 'Failed to fetch media');
   },
 
   async addMedia(media: Partial<MediaItem>): Promise<MediaItem> {
@@ -126,8 +135,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify(media),
     });
-    if (!res.ok) throw new Error('Failed to add media');
-    return res.json();
+    return handleResponse<MediaItem>(res, 'Failed to add media');
   },
 
   async deleteMedia(id: string): Promise<void> {
@@ -135,14 +143,13 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders(true),
     });
-    if (!res.ok) throw new Error('Failed to delete media');
+    await handleResponse<{ success: boolean }>(res, 'Failed to delete media');
   },
 
   // Settings
   async getSettings(): Promise<SiteSettings> {
     const res = await fetch('/api/settings');
-    if (!res.ok) throw new Error('Failed to fetch settings');
-    return res.json();
+    return handleResponse<SiteSettings>(res, 'Failed to fetch settings');
   },
 
   async updateSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
@@ -151,8 +158,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify(settings),
     });
-    if (!res.ok) throw new Error('Failed to update settings');
-    return res.json();
+    return handleResponse<SiteSettings>(res, 'Failed to update settings');
   },
 
   // Activity Logs
@@ -160,8 +166,7 @@ export const api = {
     const res = await fetch('/api/activity', {
       headers: getHeaders(true),
     });
-    if (!res.ok) throw new Error('Failed to fetch activity logs');
-    return res.json();
+    return handleResponse<ActivityLog[]>(res, 'Failed to fetch activity logs');
   },
 
   // Auth
@@ -171,11 +176,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password }),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Invalid credentials');
-    }
-    const data = await res.json();
+    const data = await handleResponse<{ token: string; user: { username: string; role: string; lastLogin: string } }>(res, 'Invalid credentials');
     localStorage.setItem('jurabek_admin_token', data.token);
     return data;
   },
@@ -189,7 +190,7 @@ export const api = {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return { isAuthenticated: false, user: null };
-      return res.json();
+      return await res.json();
     } catch {
       return { isAuthenticated: false, user: null };
     }
@@ -198,10 +199,14 @@ export const api = {
   async logout(): Promise<void> {
     const token = getAuthToken();
     if (token) {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Ignore logout network errors
+      }
       localStorage.removeItem('jurabek_admin_token');
     }
   },
@@ -212,9 +217,7 @@ export const api = {
       headers: getHeaders(true),
       body: JSON.stringify({ currentPassword, newPassword }),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to change password');
-    }
+    await handleResponse<{ success: boolean; message: string }>(res, 'Failed to change password');
   }
 };
+
