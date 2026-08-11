@@ -48,8 +48,22 @@ export function JurabekApp() {
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
 
   // Admin state
-  const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
-  const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
+  const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      return localStorage.getItem('jurabek_in_admin') === 'true' && (path.startsWith('/admin') || hash === '#admin');
+    }
+    return false;
+  });
+  const [showAdminLogin, setShowAdminLogin] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      return path === '/admin' || path.startsWith('/admin') || hash === '#admin';
+    }
+    return false;
+  });
   const [session, setSession] = useState<UserSession>({ isAuthenticated: false, user: null });
   const [adminTab, setAdminTab] = useState<'dashboard' | 'posts' | 'categories' | 'editor' | 'media' | 'settings'>('dashboard');
   const [editingPost, setEditingPost] = useState<Post | null>(null);
@@ -137,6 +151,12 @@ export function JurabekApp() {
       setTags(initialTags);
       setMediaItems(initialMedia);
       setSettings(initialSettings);
+
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path === '/admin' || path.startsWith('/admin') || hash === '#admin') {
+        setShowAdminLogin(true);
+      }
     } finally {
       setIsLoading(false);
     }

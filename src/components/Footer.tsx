@@ -28,6 +28,17 @@ export const Footer: React.FC<FooterProps> = ({ siteTitle, authorName, setActive
           >
             {t.archive}
           </button>
+          <a
+            href="/admin"
+            onClick={(e) => {
+              e.preventDefault();
+              window.history.pushState({}, '', '/admin');
+              window.dispatchEvent(new Event('popstate'));
+            }}
+            className="hover:text-[#111111] dark:hover:text-[#ECECEC] transition-colors"
+          >
+            Admin
+          </a>
         </div>
       </div>
     </footer>
