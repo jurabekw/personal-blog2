@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import createExpressApp, { escapeXml } from './api/serverApp';
+import { createExpressApp, escapeXml } from './api/index';
 
 async function startServer() {
   const { app, db } = createExpressApp();
