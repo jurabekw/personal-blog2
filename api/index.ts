@@ -270,7 +270,7 @@ export function createExpressApp() {
   app.post('/api/posts', requireAdmin, (req, res) => {
     try {
       const db = loadDb();
-      const { title, slug, excerpt, content, category, tags, coverImage, coverImageAlt, status, isFeatured, seoTitle, seoDescription, footnotes } = req.body;
+      const { title, slug, excerpt, content, category, tags, coverImage, coverImageAlt, status, isFeatured, seoTitle, seoDescription, footnotes, faqs } = req.body;
 
       if (!title || !content) {
         return res.status(400).json({ error: 'Title and content are required' });
@@ -306,7 +306,8 @@ export function createExpressApp() {
         viewsCount: 0,
         seoTitle,
         seoDescription,
-        footnotes: footnotes || []
+        footnotes: footnotes || [],
+        faqs: faqs || []
       };
 
       db.posts.unshift(newPost);
@@ -344,7 +345,7 @@ export function createExpressApp() {
       }
 
       const existing = db.posts[postIndex];
-      const { title, slug, excerpt, content, category, tags, coverImage, coverImageAlt, status, isFeatured, seoTitle, seoDescription, footnotes, scheduledAt } = req.body;
+      const { title, slug, excerpt, content, category, tags, coverImage, coverImageAlt, status, isFeatured, seoTitle, seoDescription, footnotes, scheduledAt, faqs } = req.body;
 
       const { wordCount, readingTimeMinutes } = calculateReadingTime(content || existing.content);
       const now = new Date().toISOString();
@@ -367,6 +368,7 @@ export function createExpressApp() {
         seoTitle: seoTitle !== undefined ? seoTitle : existing.seoTitle,
         seoDescription: seoDescription !== undefined ? seoDescription : existing.seoDescription,
         footnotes: footnotes !== undefined ? footnotes : existing.footnotes,
+        faqs: faqs !== undefined ? faqs : existing.faqs,
         scheduledAt: scheduledAt !== undefined ? scheduledAt : existing.scheduledAt,
         wordCount,
         readingTimeMinutes,
