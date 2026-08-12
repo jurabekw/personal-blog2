@@ -12,6 +12,13 @@ export interface TOCItem {
   level: 1 | 2 | 3;
 }
 
+export interface FAQ {
+  id: string;
+  question: string;
+  answer: string; // Plain text or markdown
+  order: number; // For sequencing FAQs
+}
+
 export interface Post {
   id: string;
   title: string;
@@ -33,6 +40,7 @@ export interface Post {
   seoTitle?: string;
   seoDescription?: string;
   footnotes?: Footnote[];
+  faqs?: FAQ[]; // NEW: FAQ items for this article
   viewsCount?: number;
 }
 
