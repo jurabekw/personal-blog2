@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { initialPosts, initialCategories, initialTags, initialMedia, initialSettings, initialActivityLogs } from '../src/data/seedData';
+import { initialPosts, initialCategories, initialTags, initialMedia, initialSettings, initialActivityLogs } from './seedData.js';
 import { Post, Category, Tag, MediaItem, SiteSettings, ActivityLog } from '../src/types';
 
 const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
