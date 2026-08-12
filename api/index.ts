@@ -22,36 +22,78 @@ interface DatabaseSchema {
 // In-memory active session tracking for rapid local checks
 const activeSessions = new Set<string>();
 
-// Ensure database file exists and returns a valid schema
-export function loadDb(): DatabaseSchema {
-  let db: DatabaseSchema | null = null;
-
-  // 1. Try reading DB_FILE from DATA_DIR (/tmp/data on Vercel)
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      const content = fs.readFileSync(DB_FILE, 'utf-8');
-      db = JSON.parse(content);
-    } catch (err) {
-      console.error('Failed to parse DB_FILE:', err);
+// Ensure database file exists and returns a valid schema safely
+export function saveDb(db: DatabaseSchema) {
+  try {
+    const targetDir = isVercel ? '/tmp/data' : DATA_DIR;
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
+    const targetFile = isVercel ? '/tmp/data/db.json' : DB_FILE;
+    fs.writeFileSync(targetFile, JSON.stringify(db, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[saveDb warning] Could not write database to disk (operating in-memory):', err);
   }
+}
 
-  // 2. Fallback to reading root data/db.json if available
-  if (!db) {
-    const rootDb = path.join(process.cwd(), 'data', 'db.json');
-    if (fs.existsSync(rootDb)) {
+export function loadDb(): DatabaseSchema {
+  try {
+    let db: DatabaseSchema | null = null;
+
+    // 1. Try reading DB_FILE from DATA_DIR (/tmp/data on Vercel)
+    const targetFile = isVercel ? '/tmp/data/db.json' : DB_FILE;
+    if (fs.existsSync(targetFile)) {
       try {
-        const content = fs.readFileSync(rootDb, 'utf-8');
+        const content = fs.readFileSync(targetFile, 'utf-8');
         db = JSON.parse(content);
       } catch (err) {
-        console.error('Failed to read root db.json:', err);
+        console.error('Failed to parse target DB_FILE:', err);
       }
     }
-  }
 
-  // 3. Fallback to initial seed data
-  if (!db) {
-    db = {
+    // 2. Fallback to reading root data/db.json if available
+    if (!db) {
+      const rootDb = path.join(process.cwd(), 'data', 'db.json');
+      if (fs.existsSync(rootDb)) {
+        try {
+          const content = fs.readFileSync(rootDb, 'utf-8');
+          db = JSON.parse(content);
+        } catch (err) {
+          console.error('Failed to read root db.json:', err);
+        }
+      }
+    }
+
+    // 3. Fallback to initial seed data
+    if (!db) {
+      db = {
+        posts: initialPosts || [],
+        categories: initialCategories || [],
+        tags: initialTags || [],
+        media: initialMedia || [],
+        settings: initialSettings || ({} as SiteSettings),
+        activity: initialActivityLogs || [],
+        adminPasswordHash: process.env.ADMIN_PASSWORD || 'James1995.123',
+        sessions: []
+      };
+    }
+
+    // Ensure default defaults
+    if (!db.adminPasswordHash || db.adminPasswordHash === 'admin123') {
+      db.adminPasswordHash = process.env.ADMIN_PASSWORD || 'James1995.123';
+    }
+
+    if (!Array.isArray(db.sessions)) {
+      db.sessions = [];
+    }
+
+    // Sync back to disk safely
+    saveDb(db);
+
+    return db;
+  } catch (err) {
+    console.error('[loadDb fatal error]:', err);
+    return {
       posts: initialPosts || [],
       categories: initialCategories || [],
       tags: initialTags || [],
@@ -61,31 +103,6 @@ export function loadDb(): DatabaseSchema {
       adminPasswordHash: process.env.ADMIN_PASSWORD || 'James1995.123',
       sessions: []
     };
-  }
-
-  // Ensure default defaults
-  if (!db.adminPasswordHash || db.adminPasswordHash === 'admin123') {
-    db.adminPasswordHash = process.env.ADMIN_PASSWORD || 'James1995.123';
-  }
-
-  if (!Array.isArray(db.sessions)) {
-    db.sessions = [];
-  }
-
-  // Sync back to disk
-  saveDb(db);
-
-  return db;
-}
-
-export function saveDb(db: DatabaseSchema) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed to save database file to disk:', err);
   }
 }
 
@@ -108,6 +125,30 @@ export function escapeXml(unsafe: string): string {
 
 export function createExpressApp() {
   const app = express();
+
+  // CORS & Path Normalization Middleware
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    // Path normalizer: Ensure req.url starts with /api if Vercel rewrite stripped it
+    if (
+      !req.url.startsWith('/api') &&
+      !req.url.startsWith('/robots.txt') &&
+      !req.url.startsWith('/sitemap') &&
+      !req.url.startsWith('/rss') &&
+      !req.url.startsWith('/feed')
+    ) {
+      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+    }
+
+    next();
+  });
 
   // Standard body parsers
   app.use(express.json({ limit: '10mb' }));
@@ -821,6 +862,14 @@ Sitemap: ${baseUrl}/sitemap.xml
     } catch (err: any) {
       res.status(500).send('<rss></rss>');
     }
+  });
+
+  // Catch-all 404 Handler for any unmatched request reaching Express
+  app.use((req: express.Request, res: express.Response) => {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `No route handler for ${req.method} ${req.originalUrl || req.url}`
+    });
   });
 
   // Global Error Handler
