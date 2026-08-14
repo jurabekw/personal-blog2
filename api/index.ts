@@ -1,109 +1,45 @@
+import crypto from 'crypto';
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
-import { initialPosts, initialCategories, initialTags, initialMedia, initialSettings, initialActivityLogs } from './seedData.js';
-import { Post, Category, Tag, MediaItem, SiteSettings, ActivityLog } from '../src/types';
+import bcrypt from 'bcryptjs';
+import {
+  createAdminUser,
+  createSession,
+  deleteSession,
+  findSessionUser,
+  getAdminUser,
+  loadDb,
+  publishDuePosts,
+  saveDb,
+  updateAdminPassword
+} from './database.js';
+import { Post, Category, MediaItem } from '../src/types';
+
+export { loadDb, saveDb } from './database.js';
 
 const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
-const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 7;
 
-interface DatabaseSchema {
-  posts: Post[];
-  categories: Category[];
-  tags: Tag[];
-  media: MediaItem[];
-  settings: SiteSettings;
-  activity: ActivityLog[];
-  adminPasswordHash: string; // Default: 'James1995.123'
-  sessions?: string[];
+type AuthenticatedRequest = express.Request & { adminUserId?: string; adminUsername?: string };
+
+function sessionHash(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-// In-memory active session tracking for rapid local checks
-const activeSessions = new Set<string>();
-
-// Ensure database file exists and returns a valid schema safely
-export function saveDb(db: DatabaseSchema) {
-  try {
-    const targetDir = isVercel ? '/tmp/data' : DATA_DIR;
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-    const targetFile = isVercel ? '/tmp/data/db.json' : DB_FILE;
-    fs.writeFileSync(targetFile, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('[saveDb warning] Could not write database to disk (operating in-memory):', err);
-  }
+function bearerToken(req: express.Request): string | null {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return null;
+  return header.slice('Bearer '.length);
 }
 
-export function loadDb(): DatabaseSchema {
-  try {
-    let db: DatabaseSchema | null = null;
+async function ensureAdminUser() {
+  const existing = await getAdminUser();
+  if (existing) return existing;
 
-    // 1. Try reading DB_FILE from DATA_DIR (/tmp/data on Vercel)
-    const targetFile = isVercel ? '/tmp/data/db.json' : DB_FILE;
-    if (fs.existsSync(targetFile)) {
-      try {
-        const content = fs.readFileSync(targetFile, 'utf-8');
-        db = JSON.parse(content);
-      } catch (err) {
-        console.error('Failed to parse target DB_FILE:', err);
-      }
-    }
+  const bootstrapPassword = process.env.ADMIN_PASSWORD;
+  if (!bootstrapPassword) return null;
 
-    // 2. Fallback to reading root data/db.json if available
-    if (!db) {
-      const rootDb = path.join(process.cwd(), 'data', 'db.json');
-      if (fs.existsSync(rootDb)) {
-        try {
-          const content = fs.readFileSync(rootDb, 'utf-8');
-          db = JSON.parse(content);
-        } catch (err) {
-          console.error('Failed to read root db.json:', err);
-        }
-      }
-    }
-
-    // 3. Fallback to initial seed data
-    if (!db) {
-      db = {
-        posts: initialPosts || [],
-        categories: initialCategories || [],
-        tags: initialTags || [],
-        media: initialMedia || [],
-        settings: initialSettings || ({} as SiteSettings),
-        activity: initialActivityLogs || [],
-        adminPasswordHash: process.env.ADMIN_PASSWORD || 'James1995.123',
-        sessions: []
-      };
-    }
-
-    // Ensure default defaults
-    if (!db.adminPasswordHash || db.adminPasswordHash === 'admin123') {
-      db.adminPasswordHash = process.env.ADMIN_PASSWORD || 'James1995.123';
-    }
-
-    if (!Array.isArray(db.sessions)) {
-      db.sessions = [];
-    }
-
-    // Sync back to disk safely
-    saveDb(db);
-
-    return db;
-  } catch (err) {
-    console.error('[loadDb fatal error]:', err);
-    return {
-      posts: initialPosts || [],
-      categories: initialCategories || [],
-      tags: initialTags || [],
-      media: initialMedia || [],
-      settings: initialSettings || ({} as SiteSettings),
-      activity: initialActivityLogs || [],
-      adminPasswordHash: process.env.ADMIN_PASSWORD || 'James1995.123',
-      sessions: []
-    };
-  }
+  const passwordHash = await bcrypt.hash(bootstrapPassword, 12);
+  return createAdminUser(process.env.ADMIN_USERNAME || 'Jurabek', passwordHash);
 }
 
 export function calculateReadingTime(text: string): { wordCount: number; readingTimeMinutes: number } {
@@ -169,23 +105,22 @@ export function createExpressApp() {
     next();
   });
 
-  // Helper middleware for protected admin routes
-  const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Protected routes require a non-expired, hashed session stored in Neon.
+  const requireAdmin = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
+      const token = bearerToken(req);
       if (!token) {
         return res.status(401).json({ error: 'Unauthorized. Token missing.' });
       }
 
-      const db = loadDb();
-      const validSessions = db.sessions || [];
-
-      if (activeSessions.has(token) || validSessions.includes(token)) {
-        activeSessions.add(token);
-        return next();
+      const user = await findSessionUser(sessionHash(token));
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized. Admin session required.' });
       }
 
-      return res.status(401).json({ error: 'Unauthorized. Admin session required.' });
+      req.adminUserId = user.id;
+      req.adminUsername = user.username;
+      return next();
     } catch (err: any) {
       console.error('[requireAdmin error]:', err);
       return res.status(401).json({ error: 'Unauthorized. Authentication failed.' });
@@ -199,14 +134,33 @@ export function createExpressApp() {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), isVercel });
   });
 
-  // GET /api/posts
-  app.get('/api/posts', (req, res) => {
-    try {
-      const db = loadDb();
-      const { status, category, tag, search, featured } = req.query;
-      let filtered = [...db.posts];
+  // GET /api/cron/publish — invoked by Vercel Cron with CRON_SECRET.
+  app.get('/api/cron/publish', async (req, res) => {
+    const expected = process.env.CRON_SECRET;
+    if (!expected || req.headers.authorization !== `Bearer ${expected}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-      if (status && status !== 'all') {
+    try {
+      await publishDuePosts();
+      return res.json({ success: true, publishedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error('[cron publish error]:', err);
+      return res.status(500).json({ error: 'Failed to publish scheduled posts' });
+    }
+  });
+
+  // GET /api/posts
+  app.get('/api/posts', async (req, res) => {
+    try {
+      await publishDuePosts();
+      const db = await loadDb();
+      const { status, category, tag, search, featured } = req.query;
+      const token = bearerToken(req);
+      const adminUser = token ? await findSessionUser(sessionHash(token)) : null;
+      let filtered = adminUser ? [...db.posts] : db.posts.filter((post) => post.status === 'published');
+
+      if (adminUser && status && status !== 'all') {
         filtered = filtered.filter((p) => p.status === status);
       }
 
@@ -244,9 +198,10 @@ export function createExpressApp() {
   });
 
   // GET /api/posts/:idOrSlug
-  app.get('/api/posts/:idOrSlug', (req, res) => {
+  app.get('/api/posts/:idOrSlug', async (req, res) => {
     try {
-      const db = loadDb();
+      await publishDuePosts();
+      const db = await loadDb();
       const { idOrSlug } = req.params;
       const post = db.posts.find((p) => p.id === idOrSlug || p.slug === idOrSlug);
 
@@ -254,11 +209,14 @@ export function createExpressApp() {
         return res.status(404).json({ error: 'Post not found' });
       }
 
-      if (req.query.incrementView === 'true') {
-        post.viewsCount = (post.viewsCount || 0) + 1;
-        saveDb(db);
+      const token = bearerToken(req);
+      const adminUser = token ? await findSessionUser(sessionHash(token)) : null;
+      if (post.status !== 'published' && !adminUser) {
+        return res.status(404).json({ error: 'Post not found' });
       }
 
+      // A GET request is intentionally read-only. View analytics should be recorded through a
+      // rate-limited, same-origin event endpoint rather than a query parameter that anyone can replay.
       res.json(post);
     } catch (err: any) {
       console.error('[GET /api/posts/:idOrSlug error]:', err);
@@ -267,9 +225,9 @@ export function createExpressApp() {
   });
 
   // POST /api/posts (Protected)
-  app.post('/api/posts', requireAdmin, (req, res) => {
+  app.post('/api/posts', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { title, slug, excerpt, content, category, tags, coverImage, coverImageAlt, status, isFeatured, seoTitle, seoDescription, footnotes } = req.body;
 
       if (!title || !content) {
@@ -324,7 +282,7 @@ export function createExpressApp() {
         type: 'post'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.status(201).json(newPost);
     } catch (err: any) {
       console.error('[POST /api/posts error]:', err);
@@ -333,9 +291,9 @@ export function createExpressApp() {
   });
 
   // PUT /api/posts/:id (Protected)
-  app.put('/api/posts/:id', requireAdmin, (req, res) => {
+  app.put('/api/posts/:id', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { id } = req.params;
       const postIndex = db.posts.findIndex((p) => p.id === id);
 
@@ -384,7 +342,7 @@ export function createExpressApp() {
         type: 'post'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.json(updatedPost);
     } catch (err: any) {
       console.error('[PUT /api/posts/:id error]:', err);
@@ -393,9 +351,9 @@ export function createExpressApp() {
   });
 
   // DELETE /api/posts/:id (Protected)
-  app.delete('/api/posts/:id', requireAdmin, (req, res) => {
+  app.delete('/api/posts/:id', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { id } = req.params;
       const post = db.posts.find((p) => p.id === id);
 
@@ -413,7 +371,7 @@ export function createExpressApp() {
         type: 'post'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.json({ success: true, message: 'Post deleted successfully' });
     } catch (err: any) {
       console.error('[DELETE /api/posts/:id error]:', err);
@@ -422,9 +380,9 @@ export function createExpressApp() {
   });
 
   // GET /api/categories
-  app.get('/api/categories', (req, res) => {
+  app.get('/api/categories', async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       res.json(db.categories);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to fetch categories' });
@@ -432,9 +390,9 @@ export function createExpressApp() {
   });
 
   // POST /api/categories (Protected)
-  app.post('/api/categories', requireAdmin, (req, res) => {
+  app.post('/api/categories', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { name, description } = req.body;
       if (!name) return res.status(400).json({ error: 'Category name is required' });
 
@@ -457,7 +415,7 @@ export function createExpressApp() {
         type: 'category'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.status(201).json(newCat);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to create category' });
@@ -465,9 +423,9 @@ export function createExpressApp() {
   });
 
   // PUT /api/categories/:id (Protected)
-  app.put('/api/categories/:id', requireAdmin, (req, res) => {
+  app.put('/api/categories/:id', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { id } = req.params;
       const { name, description } = req.body;
 
@@ -506,7 +464,7 @@ export function createExpressApp() {
         type: 'category'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.json(updatedCat);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to update category' });
@@ -514,9 +472,9 @@ export function createExpressApp() {
   });
 
   // DELETE /api/categories/:id (Protected)
-  app.delete('/api/categories/:id', requireAdmin, (req, res) => {
+  app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { id } = req.params;
       const cat = db.categories.find((c) => c.id === id);
       if (!cat) {
@@ -540,7 +498,7 @@ export function createExpressApp() {
         type: 'category'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.json({ success: true, message: 'Category deleted successfully' });
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to delete category' });
@@ -548,9 +506,9 @@ export function createExpressApp() {
   });
 
   // GET /api/tags
-  app.get('/api/tags', (req, res) => {
+  app.get('/api/tags', async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       res.json(db.tags);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to fetch tags' });
@@ -558,9 +516,9 @@ export function createExpressApp() {
   });
 
   // GET /api/media
-  app.get('/api/media', (req, res) => {
+  app.get('/api/media', async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       res.json(db.media);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to fetch media' });
@@ -568,9 +526,9 @@ export function createExpressApp() {
   });
 
   // POST /api/media (Protected)
-  app.post('/api/media', requireAdmin, (req, res) => {
+  app.post('/api/media', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { name, url, altText, sizeBytes, mimeType } = req.body;
       if (!url) return res.status(400).json({ error: 'Media URL is required' });
 
@@ -594,7 +552,7 @@ export function createExpressApp() {
         type: 'media'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.status(201).json(newMedia);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to upload media' });
@@ -602,12 +560,12 @@ export function createExpressApp() {
   });
 
   // DELETE /api/media/:id (Protected)
-  app.delete('/api/media/:id', requireAdmin, (req, res) => {
+  app.delete('/api/media/:id', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const { id } = req.params;
       db.media = db.media.filter((m) => m.id !== id);
-      saveDb(db);
+      await saveDb(db);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to delete media' });
@@ -615,9 +573,9 @@ export function createExpressApp() {
   });
 
   // GET /api/settings
-  app.get('/api/settings', (req, res) => {
+  app.get('/api/settings', async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       res.json(db.settings);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to fetch settings' });
@@ -625,9 +583,9 @@ export function createExpressApp() {
   });
 
   // PUT /api/settings (Protected)
-  app.put('/api/settings', requireAdmin, (req, res) => {
+  app.put('/api/settings', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       db.settings = { ...db.settings, ...req.body };
 
       db.activity.unshift({
@@ -638,7 +596,7 @@ export function createExpressApp() {
         type: 'settings'
       });
 
-      saveDb(db);
+      await saveDb(db);
       res.json(db.settings);
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to update settings' });
@@ -646,9 +604,9 @@ export function createExpressApp() {
   });
 
   // GET /api/activity (Protected)
-  app.get('/api/activity', requireAdmin, (req, res) => {
+  app.get('/api/activity', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       res.json(db.activity.slice(0, 20));
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to fetch activity' });
@@ -656,47 +614,39 @@ export function createExpressApp() {
   });
 
   // POST /api/auth/login
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     try {
-      const body = req.body || {};
-      const password = body.password;
-
+      const password = req.body?.password;
       if (!password) {
         return res.status(400).json({ error: 'Password is required' });
       }
 
-      const db = loadDb();
-      const expectedPassword = process.env.ADMIN_PASSWORD || db.adminPasswordHash || 'James1995.123';
+      const user = await ensureAdminUser();
+      if (!user) {
+        return res.status(503).json({ error: 'Admin account has not been provisioned. Configure ADMIN_PASSWORD once to initialize it.' });
+      }
 
-      if (password === expectedPassword) {
-        const token = `token-${Math.random().toString(36).substring(2)}${Date.now().toString(36)}`;
-        activeSessions.add(token);
-
-        if (!Array.isArray(db.sessions)) {
-          db.sessions = [];
-        }
-        db.sessions.push(token);
-
-        db.activity.unshift({
-          id: `act-${Date.now()}`,
-          action: 'Admin Login',
-          details: 'Admin logged in successfully',
-          timestamp: new Date().toISOString(),
-          type: 'auth'
-        });
-        saveDb(db);
-
-        return res.json({
-          token,
-          user: {
-            username: 'Jurabek',
-            role: 'Admin',
-            lastLogin: new Date().toISOString()
-          }
-        });
-      } else {
+      if (!(await bcrypt.compare(password, user.passwordHash))) {
         return res.status(401).json({ error: 'Invalid admin credentials' });
       }
+
+      const token = crypto.randomBytes(32).toString('base64url');
+      await createSession(user.id, sessionHash(token), new Date(Date.now() + SESSION_DURATION_MS).toISOString());
+
+      const db = await loadDb();
+      db.activity.unshift({
+        id: `act-${Date.now()}`,
+        action: 'Admin Login',
+        details: 'Admin logged in successfully',
+        timestamp: new Date().toISOString(),
+        type: 'auth'
+      });
+      await saveDb(db);
+
+      return res.json({
+        token,
+        user: { username: user.username, role: 'Admin', lastLogin: new Date().toISOString() }
+      });
     } catch (err: any) {
       console.error('[POST /api/auth/login error]:', err);
       return res.status(500).json({ error: err?.message || 'Server error during login' });
@@ -704,21 +654,19 @@ export function createExpressApp() {
   });
 
   // POST /api/auth/change-password (Protected)
-  app.post('/api/auth/change-password', requireAdmin, (req, res) => {
+  app.post('/api/auth/change-password', requireAdmin, async (req, res) => {
     try {
-      const db = loadDb();
+      const authenticatedRequest = req as AuthenticatedRequest;
+      const user = await getAdminUser();
       const { currentPassword, newPassword } = req.body;
-      const expectedPassword = process.env.ADMIN_PASSWORD || db.adminPasswordHash || 'James1995.123';
-
-      if (currentPassword !== expectedPassword) {
+      if (!user || user.id !== authenticatedRequest.adminUserId || !(await bcrypt.compare(currentPassword || '', user.passwordHash))) {
         return res.status(400).json({ error: 'Current password is incorrect' });
       }
-      if (!newPassword || newPassword.length < 6) {
-        return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+      if (!newPassword || newPassword.length < 12) {
+        return res.status(400).json({ error: 'New password must be at least 12 characters long' });
       }
 
-      db.adminPasswordHash = newPassword;
-      saveDb(db);
+      await updateAdminPassword(user.id, await bcrypt.hash(newPassword, 12));
       res.json({ success: true, message: 'Admin password updated successfully' });
     } catch (err: any) {
       console.error('[POST /api/auth/change-password error]:', err);
@@ -727,29 +675,18 @@ export function createExpressApp() {
   });
 
   // GET /api/auth/session
-  app.get('/api/auth/session', (req, res) => {
+  app.get('/api/auth/session', async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      if (!token) {
-        return res.json({ isAuthenticated: false, user: null });
-      }
+      const token = bearerToken(req);
+      if (!token) return res.json({ isAuthenticated: false, user: null });
 
-      const db = loadDb();
-      const validSessions = db.sessions || [];
+      const user = await findSessionUser(sessionHash(token));
+      if (!user) return res.json({ isAuthenticated: false, user: null });
 
-      if (activeSessions.has(token) || validSessions.includes(token)) {
-        activeSessions.add(token);
-        return res.json({
-          isAuthenticated: true,
-          user: {
-            username: 'Jurabek',
-            role: 'Admin',
-            lastLogin: new Date().toISOString()
-          }
-        });
-      } else {
-        return res.json({ isAuthenticated: false, user: null });
-      }
+      return res.json({
+        isAuthenticated: true,
+        user: { username: user.username, role: 'Admin', lastLogin: new Date().toISOString() }
+      });
     } catch (err: any) {
       console.error('[GET /api/auth/session error]:', err);
       return res.json({ isAuthenticated: false, user: null });
@@ -757,17 +694,10 @@ export function createExpressApp() {
   });
 
   // POST /api/auth/logout
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      if (token) {
-        activeSessions.delete(token);
-        const db = loadDb();
-        if (Array.isArray(db.sessions)) {
-          db.sessions = db.sessions.filter((s) => s !== token);
-          saveDb(db);
-        }
-      }
+      const token = bearerToken(req);
+      if (token) await deleteSession(sessionHash(token));
       return res.json({ success: true });
     } catch {
       return res.json({ success: true });
@@ -794,9 +724,9 @@ Sitemap: ${baseUrl}/sitemap.xml
   });
 
   // GET /sitemap.xml
-  app.get('/sitemap.xml', (req, res) => {
+  app.get('/sitemap.xml', async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const publishedPosts = db.posts.filter((p) => p.status === 'published');
 
@@ -826,9 +756,9 @@ Sitemap: ${baseUrl}/sitemap.xml
   });
 
   // GET /rss.xml or /feed.xml
-  app.get(['/rss.xml', '/feed.xml', '/rss'], (req, res) => {
+  app.get(['/rss.xml', '/feed.xml', '/rss'], async (req, res) => {
     try {
-      const db = loadDb();
+      const db = await loadDb();
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const publishedPosts = db.posts.filter((p) => p.status === 'published');
 
@@ -880,7 +810,7 @@ Sitemap: ${baseUrl}/sitemap.xml
     }
   });
 
-  return { app, db: loadDb() };
+  return { app };
 }
 
 const { app } = createExpressApp();

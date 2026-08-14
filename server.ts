@@ -2,10 +2,10 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { createExpressApp, escapeXml } from './api/index';
+import { createExpressApp, escapeXml, loadDb } from './api/index';
 
 async function startServer() {
-  const { app, db } = createExpressApp();
+  const { app } = createExpressApp();
   const PORT = 3000;
 
   // Vite & Static file middleware setup for development / standalone Node server
@@ -22,6 +22,7 @@ async function startServer() {
       }
 
       if (req.path.startsWith('/blog/')) {
+        const db = await loadDb();
         const slug = req.path.replace('/blog/', '');
         const post = db.posts.find((p) => p.slug === slug || p.id === slug);
         if (post) {
@@ -66,7 +67,8 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath, { index: false }));
 
-    app.get('*', (req, res) => {
+    app.get('*', async (req, res) => {
+      const db = await loadDb();
       const isBlogPath = req.path.startsWith('/blog/');
       let pageTitle = db.settings.title || 'Jurabek';
       let pageDesc = db.settings.description || 'Sokin raqamli vositalar, marketing va vebsaytlar haqida platforma.';
