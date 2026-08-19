@@ -2,7 +2,31 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { createExpressApp, escapeXml, loadDb } from './api/index';
+import { createExpressApp, escapeXml } from './api/index';
+import { loadLocalDb, getSqlClient, initNeonTables, mapRowToPost } from './api/db';
+import { Post, SiteSettings } from './src/types';
+
+async function getPostAndSettings(slug: string): Promise<{ post: Post | null; settings: SiteSettings }> {
+  try {
+    const sql = getSqlClient();
+    if (sql) {
+      await initNeonTables();
+      const rows = await sql`SELECT * FROM posts WHERE slug = ${slug} OR id = ${slug} LIMIT 1`;
+      const post = rows && rows.length > 0 ? mapRowToPost(rows[0]) : null;
+      const settingsRows = await sql`SELECT value FROM site_settings WHERE key = 'main' LIMIT 1`;
+      const settings = settingsRows && settingsRows.length > 0
+        ? (typeof settingsRows[0].value === 'string' ? JSON.parse(settingsRows[0].value) : settingsRows[0].value)
+        : ({} as SiteSettings);
+      return { post, settings };
+    }
+  } catch (err) {
+    console.warn('[server getPostAndSettings warning]:', err);
+  }
+
+  const local = loadLocalDb();
+  const post = local.posts.find((p) => p.slug === slug || p.id === slug) || null;
+  return { post, settings: local.settings };
+}
 
 async function startServer() {
   const { app } = createExpressApp();
@@ -22,16 +46,15 @@ async function startServer() {
       }
 
       if (req.path.startsWith('/blog/')) {
-        const db = await loadDb();
         const slug = req.path.replace('/blog/', '');
-        const post = db.posts.find((p) => p.slug === slug || p.id === slug);
+        const { post, settings } = await getPostAndSettings(slug);
         if (post) {
           try {
             const indexPath = path.join(process.cwd(), 'index.html');
             let html = fs.readFileSync(indexPath, 'utf-8');
-            const pageTitle = `${post.title} — ${db.settings.title || 'Jurabek'}`;
+            const pageTitle = `${post.title} — ${settings.title || 'Jurabek'}`;
             const pageDesc = post.excerpt || post.content.substring(0, 160);
-            const pageImage = post.coverImage || db.settings.authorAvatar || '';
+            const pageImage = post.coverImage || settings.authorAvatar || '';
             const host = req.get('host') || 'localhost:3000';
             const fullUrl = `${req.protocol}://${host}${req.originalUrl}`;
 
@@ -39,7 +62,7 @@ async function startServer() {
     <title>${escapeXml(pageTitle)}</title>
     <meta name="description" content="${escapeXml(pageDesc)}" />
     <link rel="canonical" href="${fullUrl}" />
-    <meta property="og:site_name" content="${escapeXml(db.settings.title || 'Jurabek')}" />
+    <meta property="og:site_name" content="${escapeXml(settings.title || 'Jurabek')}" />
     <meta property="og:title" content="${escapeXml(pageTitle)}" />
     <meta property="og:description" content="${escapeXml(pageDesc)}" />
     <meta property="og:type" content="article" />
@@ -68,22 +91,23 @@ async function startServer() {
     app.use(express.static(distPath, { index: false }));
 
     app.get('*', async (req, res) => {
-      const db = await loadDb();
       const isBlogPath = req.path.startsWith('/blog/');
-      let pageTitle = db.settings.title || 'Jurabek';
-      let pageDesc = db.settings.description || 'Sokin raqamli vositalar, marketing va vebsaytlar haqida platforma.';
-      let pageImage = db.settings.authorAvatar || '';
+      let slug = '';
+      if (isBlogPath) {
+        slug = req.path.replace('/blog/', '');
+      }
+
+      const { post, settings } = await getPostAndSettings(slug);
+      let pageTitle = settings.title || 'Jurabek';
+      let pageDesc = settings.description || 'Sokin raqamli vositalar, marketing va vebsaytlar haqida platforma.';
+      let pageImage = settings.authorAvatar || '';
       let pageType = 'website';
 
-      if (isBlogPath) {
-        const slug = req.path.replace('/blog/', '');
-        const post = db.posts.find((p) => p.slug === slug || p.id === slug);
-        if (post) {
-          pageTitle = `${post.title} — ${db.settings.title || 'Jurabek'}`;
-          pageDesc = post.excerpt || post.content.substring(0, 160);
-          if (post.coverImage) pageImage = post.coverImage;
-          pageType = 'article';
-        }
+      if (post) {
+        pageTitle = `${post.title} — ${settings.title || 'Jurabek'}`;
+        pageDesc = post.excerpt || post.content.substring(0, 160);
+        if (post.coverImage) pageImage = post.coverImage;
+        pageType = 'article';
       }
 
       const indexPath = path.join(distPath, 'index.html');
@@ -95,7 +119,7 @@ async function startServer() {
     <title>${escapeXml(pageTitle)}</title>
     <meta name="description" content="${escapeXml(pageDesc)}" />
     <link rel="canonical" href="${fullUrl}" />
-    <meta property="og:site_name" content="${escapeXml(db.settings.title || 'Jurabek')}" />
+    <meta property="og:site_name" content="${escapeXml(settings.title || 'Jurabek')}" />
     <meta property="og:title" content="${escapeXml(pageTitle)}" />
     <meta property="og:description" content="${escapeXml(pageDesc)}" />
     <meta property="og:type" content="${pageType}" />

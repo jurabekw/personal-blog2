@@ -6,7 +6,8 @@ import { Textarea } from '../ui/Textarea';
 import { Button } from '../ui/Button';
 import { Switch } from '../ui/Select';
 import { useToast } from '../ui/Toast';
-import { Settings, Save, Lock, Download, RotateCcw, ShieldCheck, Upload, User, Trash2, Search, Globe, Rss, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { Settings, Save, Lock, Download, RotateCcw, ShieldCheck, Upload, User, Trash2, Search, Globe, Rss, ExternalLink, CheckCircle2, Database, RefreshCw, AlertCircle } from 'lucide-react';
+import { api } from '../../lib/api';
 
 interface AdminSettingsViewProps {
   settings: SiteSettings;
@@ -35,6 +36,26 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [showProgress, setShowProgress] = useState(settings.showProgress ?? true);
 
   const [isSaving, setIsSaving] = useState(false);
+
+  // Database diagnostic status
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; provider: string; message: string } | null>(null);
+  const [isCheckingDb, setIsCheckingDb] = useState(false);
+
+  React.useEffect(() => {
+    checkDb();
+  }, []);
+
+  const checkDb = async () => {
+    setIsCheckingDb(true);
+    try {
+      const st = await api.getDbStatus();
+      setDbStatus(st);
+    } catch {
+      setDbStatus({ connected: false, provider: 'local_file', message: 'Failed to connect to database API' });
+    } finally {
+      setIsCheckingDb(false);
+    }
+  };
 
   // Security password state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -331,6 +352,63 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
           <span>{isSaving ? 'Saving...' : 'Save Settings'}</span>
         </Button>
       </form>
+
+      {/* Neon Database Status Section */}
+      <Card elevation="sm" className="p-6 flex flex-col gap-4">
+        <div className="flex items-center justify-between border-b border-[#E8E8E8] dark:border-[#2A2A28] pb-3">
+          <div className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-[#1E3E62] dark:text-blue-400" />
+            <h3 className="font-semibold text-[18px] text-[#111111] dark:text-[#ECECEC]">Database Connection (Neon PostgreSQL)</h3>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={checkDb}
+            disabled={isCheckingDb}
+            className="gap-1.5 text-[12px]"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingDb ? 'animate-spin' : ''}`} />
+            <span>Check Connection</span>
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {dbStatus?.connected ? (
+            <div className="p-4 rounded-[8px] bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <div className="flex flex-col gap-1">
+                <span className="font-medium text-[14px] text-emerald-900 dark:text-emerald-200">
+                  Neon PostgreSQL Connected & Active
+                </span>
+                <span className="text-[13px] text-emerald-700 dark:text-emerald-400">
+                  {dbStatus.message}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-[8px] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="flex flex-col gap-1">
+                <span className="font-medium text-[14px] text-amber-900 dark:text-amber-200">
+                  Operating in Local Storage Fallback
+                </span>
+                <span className="text-[13px] text-amber-700 dark:text-amber-400">
+                  {dbStatus?.message || 'To persist data permanently across all Vercel serverless deployments, add your DATABASE_URL (Neon pooled connection string) in your Vercel Project Settings > Environment Variables.'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="p-3.5 rounded-[8px] bg-[#F4F4F2] dark:bg-[#262624] text-[13px] text-[#666666] dark:text-[#999999] flex flex-col gap-1.5 font-mono">
+            <span className="font-sans font-semibold text-[#111111] dark:text-[#ECECEC] text-[13px]">
+              Vercel Environment Variable:
+            </span>
+            <code className="text-[12px] text-[#1E3E62] dark:text-blue-300 break-all select-all">
+              DATABASE_URL=postgresql://user:pass@ep-cool-fog-123456-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
+            </code>
+          </div>
+        </div>
+      </Card>
 
       {/* Security Section */}
       <Card elevation="sm" className="p-6 flex flex-col gap-4">

@@ -218,6 +218,18 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     });
     await handleResponse<{ success: boolean; message: string }>(res, 'Failed to change password');
+  },
+
+  async getDbStatus(): Promise<{ connected: boolean; provider: string; message: string }> {
+    try {
+      const res = await fetch('/api/db/status');
+      if (!res.ok) {
+        return { connected: false, provider: 'local_file', message: 'Could not fetch database status' };
+      }
+      return await res.json();
+    } catch (err: any) {
+      return { connected: false, provider: 'local_file', message: err.message || 'Database status check failed' };
+    }
   }
 };
 
