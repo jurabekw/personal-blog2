@@ -315,11 +315,11 @@ export function createExpressApp() {
             views_count, seo_title, seo_description, footnotes, created_at, updated_at
           ) VALUES (
             ${newPost.id}, ${newPost.title}, ${newPost.slug}, ${newPost.excerpt || ''}, ${newPost.content},
-            ${newPost.category}, ${JSON.stringify(newPost.tags)}::jsonb, ${newPost.coverImage || null},
+            ${newPost.category}, ${newPost.tags || []}, ${newPost.coverImage || null},
             ${newPost.coverImageAlt || null}, ${newPost.status}, ${newPost.isFeatured},
             ${newPost.publishedAt || null}, ${newPost.scheduledAt || null}, ${newPost.wordCount},
             ${newPost.readingTimeMinutes}, ${newPost.viewsCount}, ${newPost.seoTitle || null},
-            ${newPost.seoDescription || null}, ${JSON.stringify(newPost.footnotes)}::jsonb,
+            ${newPost.seoDescription || null}, ${JSON.stringify(newPost.footnotes || [])}::jsonb,
             ${newPost.createdAt}, ${newPost.updatedAt}
           )
         `;
@@ -443,7 +443,7 @@ export function createExpressApp() {
             excerpt = ${updated.excerpt || ''},
             content = ${updated.content},
             category = ${updated.category},
-            tags = ${JSON.stringify(updated.tags)}::jsonb,
+            tags = ${updated.tags || []},
             cover_image = ${updated.coverImage || null},
             cover_image_alt = ${updated.coverImageAlt || null},
             status = ${updated.status},
@@ -454,7 +454,7 @@ export function createExpressApp() {
             reading_time_minutes = ${updated.readingTimeMinutes},
             seo_title = ${updated.seoTitle || null},
             seo_description = ${updated.seoDescription || null},
-            footnotes = ${JSON.stringify(updated.footnotes)}::jsonb,
+            footnotes = ${JSON.stringify(updated.footnotes || [])}::jsonb,
             updated_at = ${updated.updatedAt}
           WHERE id = ${id}
         `;

@@ -64,7 +64,7 @@ export async function initNeonTables(): Promise<boolean> {
         excerpt TEXT,
         content TEXT NOT NULL,
         category VARCHAR(100) DEFAULT 'Essays',
-        tags JSONB DEFAULT '[]'::jsonb,
+        tags TEXT[] DEFAULT '{}',
         cover_image TEXT,
         cover_image_alt TEXT,
         status VARCHAR(50) DEFAULT 'published',
@@ -224,7 +224,7 @@ export async function initNeonTables(): Promise<boolean> {
             seo_title, seo_description, footnotes, created_at, updated_at
           ) VALUES (
             ${p.id}, ${p.title}, ${p.slug}, ${p.excerpt || ''}, ${p.content}, ${p.category},
-            ${JSON.stringify(p.tags || [])}::jsonb, ${p.coverImage || null}, ${p.coverImageAlt || null},
+            ${p.tags || []}, ${p.coverImage || null}, ${p.coverImageAlt || null},
             ${p.status || 'published'}, ${Boolean(p.isFeatured)}, ${p.publishedAt || new Date().toISOString()},
             ${p.wordCount || 0}, ${p.readingTimeMinutes || 1}, ${p.viewsCount || 0},
             ${p.seoTitle || null}, ${p.seoDescription || null}, ${JSON.stringify(p.footnotes || [])}::jsonb,
@@ -347,7 +347,13 @@ export function mapRowToPost(row: any): Post {
     excerpt: row.excerpt || '',
     content: row.content || '',
     category: row.category || 'Essays',
-    tags: Array.isArray(row.tags) ? row.tags : (typeof row.tags === 'string' ? JSON.parse(row.tags) : []),
+    tags: Array.isArray(row.tags)
+      ? row.tags.map(String)
+      : (typeof row.tags === 'string' && row.tags.startsWith('{')
+          ? row.tags.slice(1, -1).split(',').map((s: string) => s.replace(/^"|"$/g, '').trim()).filter(Boolean)
+          : (typeof row.tags === 'string' && row.tags.startsWith('[')
+              ? JSON.parse(row.tags)
+              : [])),
     coverImage: row.cover_image || undefined,
     coverImageAlt: row.cover_image_alt || undefined,
     status: row.status || 'published',
