@@ -84,7 +84,7 @@ export interface ActivityLog {
   action: string;
   details: string;
   timestamp: string;
-  type: 'post' | 'media' | 'settings' | 'auth' | 'category';
+  type: 'post' | 'media' | 'settings' | 'auth' | 'category' | 'system';
 }
 
 export interface UserSession {

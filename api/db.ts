@@ -1,4 +1,5 @@
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
+import bcrypt from 'bcryptjs';
 import { Post, Category, Tag, MediaItem, SiteSettings, ActivityLog } from '../src/types';
 import { initialPosts, initialCategories, initialTags, initialMedia, initialSettings, initialActivityLogs } from './seedData.js';
 import fs from 'fs';
@@ -54,7 +55,7 @@ export async function initNeonTables(): Promise<boolean> {
   if (tablesInitialized) return true;
 
   try {
-    // 1. Create tables
+    // 1. Create tables if not exist
     await sql`
       CREATE TABLE IF NOT EXISTS posts (
         id VARCHAR(100) PRIMARY KEY,
@@ -72,7 +73,7 @@ export async function initNeonTables(): Promise<boolean> {
         scheduled_at TIMESTAMPTZ,
         word_count INT DEFAULT 0,
         reading_time_minutes INT DEFAULT 1,
-        views_count INT DEFAULT 0,
+        views_count BIGINT DEFAULT 0,
         seo_title TEXT,
         seo_description TEXT,
         footnotes JSONB DEFAULT '[]'::jsonb,
@@ -104,9 +105,11 @@ export async function initNeonTables(): Promise<boolean> {
         id VARCHAR(100) PRIMARY KEY,
         name TEXT NOT NULL,
         url TEXT NOT NULL,
-        alt_text TEXT,
+        alt_text TEXT DEFAULT '',
         mime_type VARCHAR(100),
         size_bytes BIGINT DEFAULT 0,
+        width INT,
+        height INT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `;
@@ -114,7 +117,10 @@ export async function initNeonTables(): Promise<boolean> {
     await sql`
       CREATE TABLE IF NOT EXISTS site_settings (
         key VARCHAR(100) PRIMARY KEY,
-        value JSONB NOT NULL
+        value JSONB,
+        singleton SMALLINT DEFAULT 1,
+        payload JSONB,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `;
 
@@ -123,8 +129,54 @@ export async function initNeonTables(): Promise<boolean> {
         id VARCHAR(100) PRIMARY KEY,
         action TEXT NOT NULL,
         details TEXT,
+        type VARCHAR(50) DEFAULT 'system',
         timestamp TIMESTAMPTZ DEFAULT NOW(),
-        type VARCHAR(50) DEFAULT 'system'
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+
+    // Ensure compatibility if table already existed without 'timestamp' or 'created_at' column
+    try {
+      await sql`ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ DEFAULT NOW()`;
+      await sql`ALTER TABLE activity_logs ALTER COLUMN timestamp DROP NOT NULL`;
+      await sql`ALTER TABLE activity_logs ALTER COLUMN timestamp SET DEFAULT NOW()`;
+    } catch {
+      // ignore
+    }
+    try {
+      await sql`ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`;
+      await sql`ALTER TABLE activity_logs ALTER COLUMN created_at DROP NOT NULL`;
+      await sql`ALTER TABLE activity_logs ALTER COLUMN created_at SET DEFAULT NOW()`;
+    } catch {
+      // ignore
+    }
+    try {
+      await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS singleton SMALLINT DEFAULT 1`;
+    } catch {
+      // ignore
+    }
+    try {
+      await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS payload JSONB`;
+    } catch {
+      // ignore
+    }
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id VARCHAR(100) PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        token_hash VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(100) REFERENCES admin_users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `;
 
@@ -135,12 +187,35 @@ export async function initNeonTables(): Promise<boolean> {
       );
     `;
 
-    // 2. Check if posts table is empty, seed initial posts if so
+    // 2. Auto-provision default admin account if not present
+    const defaultPassword = process.env.ADMIN_PASSWORD || 'James1995.123';
+    const existingAdmins = await sql`SELECT COUNT(*)::int as count FROM admin_users`;
+    const adminCount = existingAdmins[0]?.count ?? 0;
+
+    if (adminCount === 0) {
+      try {
+        const salt = bcrypt.genSaltSync(10);
+        const hash = bcrypt.hashSync(defaultPassword, salt);
+        await sql`
+          INSERT INTO admin_users (id, username, password_hash, created_at, updated_at)
+          VALUES ('admin-default', 'Jurabek', ${hash}, NOW(), NOW())
+          ON CONFLICT (id) DO UPDATE SET password_hash = ${hash}, updated_at = NOW()
+        `;
+        await sql`
+          INSERT INTO admin_config (key, value)
+          VALUES ('admin_password', ${defaultPassword})
+          ON CONFLICT (key) DO NOTHING
+        `;
+      } catch (adminErr) {
+        console.warn('[Neon Admin Init Notice]:', adminErr);
+      }
+    }
+
+    // 3. Check if posts table is empty, seed initial posts if so
     const existingPosts = await sql`SELECT COUNT(*)::int as count FROM posts`;
     const postCount = existingPosts[0]?.count ?? 0;
 
     if (postCount === 0) {
-      console.log('[Neon DB] Seeding initial posts into Neon PostgreSQL...');
       for (const p of initialPosts) {
         await sql`
           INSERT INTO posts (
@@ -183,15 +258,8 @@ export async function initNeonTables(): Promise<boolean> {
       }
 
       await sql`
-        INSERT INTO site_settings (key, value)
-        VALUES ('main', ${JSON.stringify(initialSettings)}::jsonb)
-        ON CONFLICT (key) DO NOTHING;
-      `;
-
-      const defaultAdminPass = process.env.ADMIN_PASSWORD || 'James1995.123';
-      await sql`
-        INSERT INTO admin_config (key, value)
-        VALUES ('admin_password', ${defaultAdminPass})
+        INSERT INTO site_settings (key, value, singleton, payload)
+        VALUES ('main', ${JSON.stringify(initialSettings)}::jsonb, 1, ${JSON.stringify(initialSettings)}::jsonb)
         ON CONFLICT (key) DO NOTHING;
       `;
     }
@@ -201,6 +269,29 @@ export async function initNeonTables(): Promise<boolean> {
   } catch (err) {
     console.error('[Neon Table Init Error]:', err);
     return false;
+  }
+}
+
+// Log activity safely to Neon PostgreSQL
+export async function logActivity(action: string, details: string, type = 'system') {
+  try {
+    const sql = getSqlClient();
+    const now = new Date().toISOString();
+    const id = `act-${Date.now()}`;
+    if (sql) {
+      await initNeonTables();
+      await sql`
+        INSERT INTO activity_logs (id, action, details, timestamp, created_at, type)
+        VALUES (${id}, ${action}, ${details}, ${now}, ${now}, ${type})
+      `;
+      return;
+    }
+
+    const db = loadLocalDb();
+    db.activity.unshift({ id, action, details, timestamp: now, type: type as any });
+    saveLocalDb(db);
+  } catch (err) {
+    console.warn('[logActivity warning]:', err);
   }
 }
 
@@ -250,9 +341,9 @@ export function saveLocalDb(db: LocalDatabaseSchema) {
 // Transform PostgreSQL Row to Post Object
 export function mapRowToPost(row: any): Post {
   return {
-    id: row.id,
-    title: row.title,
-    slug: row.slug,
+    id: String(row.id),
+    title: String(row.title),
+    slug: String(row.slug),
     excerpt: row.excerpt || '',
     content: row.content || '',
     category: row.category || 'Essays',

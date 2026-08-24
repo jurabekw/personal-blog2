@@ -156,7 +156,8 @@ export async function saveDb(db: DatabaseSchema): Promise<void> {
   }
   statements.push(sql`INSERT INTO site_settings (singleton, payload, updated_at) VALUES (1, ${JSON.stringify(db.settings)}::jsonb, NOW())`);
   for (const log of db.activity) {
-    statements.push(sql`INSERT INTO activity_logs (id, action, details, created_at, type) VALUES (${log.id}, ${log.action}, ${log.details}, ${log.timestamp}, ${log.type})`);
+    const timestampStr = log.timestamp || new Date().toISOString();
+    statements.push(sql`INSERT INTO activity_logs (id, action, details, created_at, timestamp, type) VALUES (${log.id}, ${log.action}, ${log.details || ''}, ${timestampStr}, ${timestampStr}, ${log.type})`);
   }
 
   await sql.transaction(statements);

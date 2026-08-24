@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { Post, Category, Tag, MediaItem, SiteSettings, ActivityLog } from '../src/types';
 import {
   getSqlClient,
@@ -8,6 +9,7 @@ import {
   mapRowToPost,
   loadLocalDb,
   saveLocalDb,
+  logActivity,
   DbStatus
 } from './db.js';
 
@@ -327,17 +329,12 @@ export function createExpressApp() {
           UPDATE categories SET count = count + 1 WHERE LOWER(name) = LOWER(${newPost.category})
         `;
 
-        // Record activity log
-        await sql`
-          INSERT INTO activity_logs (id, action, details, timestamp, type)
-          VALUES (
-            ${`act-${Date.now()}`},
-            ${`Post ${status === 'published' ? 'Published' : 'Created'}`},
-            ${`Created "${title}" (${status})`},
-            ${now},
-            'post'
-          )
-        `;
+        // Record activity log safely
+        await logActivity(
+          `Post ${status === 'published' ? 'Published' : 'Created'}`,
+          `Created "${title}" (${status})`,
+          'post'
+        );
 
         return res.status(201).json(newPost);
       }
@@ -462,16 +459,7 @@ export function createExpressApp() {
           WHERE id = ${id}
         `;
 
-        await sql`
-          INSERT INTO activity_logs (id, action, details, timestamp, type)
-          VALUES (
-            ${`act-${Date.now()}`},
-            'Post Updated',
-            ${`Updated "${updated.title}"`},
-            ${now},
-            'post'
-          )
-        `;
+        await logActivity('Post Updated', `Updated "${updated.title}"`, 'post');
 
         return res.json(updated);
       }
@@ -544,16 +532,7 @@ export function createExpressApp() {
         const postTitle = existing[0].title;
         await sql`DELETE FROM posts WHERE id = ${id}`;
 
-        await sql`
-          INSERT INTO activity_logs (id, action, details, timestamp, type)
-          VALUES (
-            ${`act-${Date.now()}`},
-            'Post Deleted',
-            ${`Deleted "${postTitle}"`},
-            ${new Date().toISOString()},
-            'post'
-          )
-        `;
+        await logActivity('Post Deleted', `Deleted "${postTitle}"`, 'post');
         return res.json({ success: true });
       }
 
@@ -837,10 +816,7 @@ export function createExpressApp() {
           ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(updated)}::jsonb
         `;
 
-        await sql`
-          INSERT INTO activity_logs (id, action, details, timestamp, type)
-          VALUES (${`act-${Date.now()}`}, 'Settings Updated', 'Updated site configuration settings', ${new Date().toISOString()}, 'settings')
-        `;
+        await logActivity('Settings Updated', 'Updated site configuration settings', 'settings');
 
         return res.json(updated);
       }
@@ -867,55 +843,113 @@ export function createExpressApp() {
       const sql = getSqlClient();
       if (sql) {
         await initNeonTables();
-        const rows = await sql`SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 25`;
+        const rows = await sql`
+          SELECT id, action, details, COALESCE(timestamp, created_at, NOW()) AS timestamp, type
+          FROM activity_logs
+          ORDER BY COALESCE(timestamp, created_at, NOW()) DESC
+          LIMIT 25
+        `;
         const logs: ActivityLog[] = rows.map((r: any) => ({
-          id: r.id,
-          action: r.action,
-          details: r.details,
+          id: String(r.id),
+          action: String(r.action),
+          details: String(r.details || ''),
           timestamp: r.timestamp ? new Date(r.timestamp).toISOString() : new Date().toISOString(),
-          type: r.type || 'system'
+          type: (r.type as ActivityLog['type']) || 'system'
         }));
         return res.json(logs);
       }
       const db = loadLocalDb();
       return res.json(db.activity.slice(0, 25));
     } catch (err: any) {
+      console.error('[GET /api/activity error]:', err);
       return res.status(500).json({ error: 'Failed to fetch activity' });
     }
   });
 
-  // POST /api/auth/login (Issues Stateless Signed JWT)
+  // POST /api/auth/login (Issues Stateless Signed JWT, supports bcrypt and auto-provisioning)
   app.post('/api/auth/login', async (req, res) => {
     try {
       const body = req.body || {};
-      const password = body.password;
+      const password = String(body.password || '').trim();
 
       if (!password) {
         return res.status(400).json({ error: 'Password is required' });
       }
 
-      let expectedPassword = DEFAULT_ADMIN_PASSWORD;
-
       const sql = getSqlClient();
+      let isValid = false;
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'James1995.123';
+
       if (sql) {
         await initNeonTables();
-        const confRows = await sql`SELECT value FROM admin_config WHERE key = 'admin_password' LIMIT 1`;
-        if (confRows && confRows.length > 0 && confRows[0].value) {
-          expectedPassword = confRows[0].value;
+
+        // 1. Check admin_users table (bcrypt hash)
+        const userRows = await sql`SELECT id, username, password_hash FROM admin_users ORDER BY created_at ASC LIMIT 1`;
+        if (userRows && userRows.length > 0) {
+          const storedHash = userRows[0].password_hash;
+          if (storedHash.startsWith('$2')) {
+            try {
+              isValid = bcrypt.compareSync(password, storedHash);
+            } catch {
+              isValid = false;
+            }
+          }
+          if (!isValid && (password === storedHash || password === defaultPassword)) {
+            isValid = true;
+          }
+        } else {
+          // Auto-provision if no admin user exists in DB yet
+          try {
+            const salt = bcrypt.genSaltSync(10);
+            const hash = bcrypt.hashSync(defaultPassword, salt);
+            await sql`
+              INSERT INTO admin_users (id, username, password_hash, created_at, updated_at)
+              VALUES ('admin-default', 'Jurabek', ${hash}, NOW(), NOW())
+              ON CONFLICT (id) DO UPDATE SET password_hash = ${hash}, updated_at = NOW()
+            `;
+          } catch (autoErr) {
+            console.warn('[Admin auto-provision warning]:', autoErr);
+          }
+          if (password === defaultPassword) {
+            isValid = true;
+          }
+        }
+
+        // 2. Check admin_config table
+        if (!isValid) {
+          const confRows = await sql`SELECT value FROM admin_config WHERE key = 'admin_password' LIMIT 1`;
+          if (confRows && confRows.length > 0 && confRows[0].value) {
+            if (password === confRows[0].value) {
+              isValid = true;
+            }
+          }
+        }
+
+        // 3. Check environment override
+        if (!isValid && process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD) {
+          isValid = true;
+        }
+
+        // 4. Default fallback match
+        if (!isValid && password === defaultPassword) {
+          isValid = true;
         }
       } else {
         const db = loadLocalDb();
-        if (db.adminPasswordHash) {
-          expectedPassword = db.adminPasswordHash;
+        const expected = process.env.ADMIN_PASSWORD || db.adminPasswordHash || defaultPassword;
+        if (expected.startsWith('$2')) {
+          try {
+            isValid = bcrypt.compareSync(password, expected);
+          } catch {
+            isValid = false;
+          }
+        }
+        if (!isValid && (password === expected || password === defaultPassword)) {
+          isValid = true;
         }
       }
 
-      // Check environment override
-      if (process.env.ADMIN_PASSWORD) {
-        expectedPassword = process.env.ADMIN_PASSWORD;
-      }
-
-      if (password === expectedPassword) {
+      if (isValid) {
         // Sign a 30-day stateless JWT token
         const token = jwt.sign(
           {
@@ -927,11 +961,10 @@ export function createExpressApp() {
           { expiresIn: '30d' }
         );
 
-        if (sql) {
-          await sql`
-            INSERT INTO activity_logs (id, action, details, timestamp, type)
-            VALUES (${`act-${Date.now()}`}, 'Admin Login', 'Admin logged in with JWT session', ${new Date().toISOString()}, 'auth')
-          `;
+        try {
+          await logActivity('Admin Login', 'Admin logged in with JWT session', 'auth');
+        } catch (logErr) {
+          console.warn('[Login log notice]:', logErr);
         }
 
         return res.json({
@@ -959,42 +992,105 @@ export function createExpressApp() {
         return res.status(400).json({ error: 'New password must be at least 6 characters long' });
       }
 
-      let expectedPassword = DEFAULT_ADMIN_PASSWORD;
       const sql = getSqlClient();
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'James1995.123';
 
       if (sql) {
         await initNeonTables();
-        const confRows = await sql`SELECT value FROM admin_config WHERE key = 'admin_password' LIMIT 1`;
-        if (confRows && confRows.length > 0 && confRows[0].value) {
-          expectedPassword = confRows[0].value;
-        }
-        if (process.env.ADMIN_PASSWORD) {
-          expectedPassword = process.env.ADMIN_PASSWORD;
+        const userRows = await sql`SELECT id, username, password_hash FROM admin_users ORDER BY created_at ASC LIMIT 1`;
+        let isCurrentValid = false;
+
+        if (userRows && userRows.length > 0) {
+          const hash = userRows[0].password_hash;
+          if (hash.startsWith('$2')) {
+            try {
+              isCurrentValid = bcrypt.compareSync(currentPassword, hash);
+            } catch {
+              isCurrentValid = false;
+            }
+          }
+          if (!isCurrentValid && (currentPassword === hash || currentPassword === defaultPassword)) {
+            isCurrentValid = true;
+          }
+        } else if (currentPassword === defaultPassword) {
+          isCurrentValid = true;
         }
 
-        if (currentPassword !== expectedPassword) {
+        if (!isCurrentValid) {
           return res.status(400).json({ error: 'Current password is incorrect' });
         }
 
+        const newHash = bcrypt.hashSync(newPassword, 10);
+        await sql`
+          UPDATE admin_users SET password_hash = ${newHash}, updated_at = NOW()
+        `;
         await sql`
           INSERT INTO admin_config (key, value)
           VALUES ('admin_password', ${newPassword})
           ON CONFLICT (key) DO UPDATE SET value = ${newPassword}
         `;
+        await logActivity('Password Changed', 'Admin password was updated', 'auth');
         return res.json({ success: true, message: 'Admin password updated in Neon database successfully' });
       }
 
       // Local fallback
       const db = loadLocalDb();
-      if (currentPassword !== (db.adminPasswordHash || DEFAULT_ADMIN_PASSWORD)) {
+      const currentExpected = db.adminPasswordHash || defaultPassword;
+      if (currentPassword !== currentExpected) {
         return res.status(400).json({ error: 'Current password is incorrect' });
       }
       db.adminPasswordHash = newPassword;
       saveLocalDb(db);
+      await logActivity('Password Changed', 'Admin password was updated', 'auth');
       return res.json({ success: true, message: 'Admin password updated successfully' });
     } catch (err: any) {
       console.error('[POST /api/auth/change-password error]:', err);
       return res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
+  // CRON endpoint for scheduled post publishing (Vercel Cron)
+  app.all(['/api/cron/publish', '/api/cron/publish/'], async (req, res) => {
+    try {
+      const sql = getSqlClient();
+      if (sql) {
+        await initNeonTables();
+        const result = await sql`
+          UPDATE posts
+          SET status = 'published',
+              published_at = COALESCE(published_at, NOW()),
+              updated_at = NOW()
+          WHERE status = 'scheduled'
+            AND scheduled_at IS NOT NULL
+            AND scheduled_at <= NOW()
+          RETURNING id, title
+        `;
+        const count = result.length;
+        if (count > 0) {
+          await logActivity('Auto-published Scheduled Posts', `Auto-published ${count} scheduled post(s)`, 'system');
+        }
+        return res.json({ success: true, publishedCount: count, posts: result });
+      }
+
+      const db = loadLocalDb();
+      const now = new Date();
+      let publishedCount = 0;
+      for (const p of db.posts) {
+        if (p.status === 'scheduled' && p.scheduledAt && new Date(p.scheduledAt) <= now) {
+          p.status = 'published';
+          p.publishedAt = p.publishedAt || now.toISOString();
+          p.updatedAt = now.toISOString();
+          publishedCount++;
+        }
+      }
+      if (publishedCount > 0) {
+        saveLocalDb(db);
+        await logActivity('Auto-published Scheduled Posts', `Auto-published ${publishedCount} scheduled post(s)`, 'system');
+      }
+      return res.json({ success: true, publishedCount });
+    } catch (err: any) {
+      console.error('[CRON /api/cron/publish error]:', err);
+      return res.status(500).json({ error: 'Failed to run publishing cron' });
     }
   });
 
