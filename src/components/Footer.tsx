@@ -24,20 +24,17 @@ export const Footer: React.FC<FooterProps> = ({ siteTitle, authorName, setActive
         <div className="flex items-center gap-6">
           <button
             onClick={() => setActiveTab('writing')}
-            className="hover:text-[#111111] dark:hover:text-[#ECECEC] transition-colors"
+            className="hover:text-[#111111] dark:hover:text-[#ECECEC] transition-colors cursor-pointer"
           >
             {t.archive}
           </button>
           <a
-            href="/admin"
-            onClick={(e) => {
-              e.preventDefault();
-              window.history.pushState({}, '', '/admin');
-              window.dispatchEvent(new Event('popstate'));
-            }}
+            href="/rss.xml"
+            target="_blank"
+            rel="noopener noreferrer"
             className="hover:text-[#111111] dark:hover:text-[#ECECEC] transition-colors"
           >
-            Admin
+            RSS
           </a>
         </div>
       </div>

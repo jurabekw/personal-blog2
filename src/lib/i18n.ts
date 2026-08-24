@@ -74,6 +74,11 @@ export const uzbekTranslations = {
     articleRemovedDesc: "Saqlangan ro'yxatdan olib tashlandi",
     copied: "Nusxalandi",
     copy: "Nusxalash",
+    faqTitle: "Ko'p beriladigan savollar",
+    faqSubtitle: "Ushbu maqola mavzusi bo'yicha eng muhim savollar va javoblar",
+    faqEmpty: "Savollar mavjud emas",
+    faqExpandAll: "Barchasini ochish",
+    faqCollapseAll: "Barchasini yopish",
   },
   about: {
     title: "Men haqimda",

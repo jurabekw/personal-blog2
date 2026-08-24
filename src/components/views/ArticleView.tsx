@@ -5,6 +5,9 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Avatar } from '../ui/Avatar';
 import { useToast } from '../ui/Toast';
+import { FormattedTable } from '../ui/FormattedTable';
+import { parseMarkdownTable, renderInlineMarkdown } from '../ui/MarkdownTable';
+import { MarkdownContent } from '../ui/MarkdownContent';
 import {
   Calendar,
   Clock,
@@ -17,6 +20,9 @@ import {
   Copy,
   List,
   Mail,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { uzbekTranslations, formatUzbekDate, formatUzbekReadingTime } from '../../lib/i18n';
 
@@ -58,6 +64,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [showTopShareMenu, setShowTopShareMenu] = useState(false);
+  const [openFaqIndexes, setOpenFaqIndexes] = useState<Record<number, boolean>>({ 0: true });
   const t = uzbekTranslations.article;
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : `https://jurabek.dev/blog/${post.slug}`;
@@ -241,10 +248,24 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         return <hr key={idx} className="my-8 border-[#E8E8E8] dark:border-[#2A2A28]" />;
       }
 
-      // Standard paragraph
+      // Markdown Table
+      if (block.trim().startsWith('|')) {
+        const parsedTable = parseMarkdownTable(block);
+        if (parsedTable) {
+          return (
+            <FormattedTable
+              key={idx}
+              headers={parsedTable.headers}
+              rows={parsedTable.rows}
+            />
+          );
+        }
+      }
+
+      // Standard paragraph with inline formatting (bold, code, links)
       return (
         <p key={idx} className="font-serif-reading text-[18px] md:text-[19px] leading-[1.8] text-[#111111] dark:text-[#ECECEC] mb-6">
-          {block}
+          {renderInlineMarkdown(block)}
         </p>
       );
     });
@@ -426,8 +447,80 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
             {/* Article Content Body */}
             <article className="prose dark:prose-invert max-w-none">
-              {renderFormattedContent(post.content)}
+              <MarkdownContent
+                content={post.content}
+                onCopyCode={handleCopyCode}
+                copiedCodeId={copiedCodeId}
+                copiedLabel={t.copied}
+                copyLabel={t.copy}
+              />
             </article>
+
+            {/* FAQ Accordion Section */}
+            {post.faqs && post.faqs.filter((f) => f && f.question?.trim() && f.answer?.trim()).length > 0 && (
+              <section className="mt-12 pt-8 border-t border-[#E8E8E8] dark:border-[#2A2A28] flex flex-col gap-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-[8px] bg-[#1E3E62]/10 dark:bg-blue-500/10 text-[#1E3E62] dark:text-blue-400">
+                      <HelpCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-[18px] md:text-[20px] font-bold text-[#111111] dark:text-[#ECECEC] font-serif">
+                        {t.faqTitle}
+                      </h3>
+                      <p className="text-[12px] md:text-[13px] text-[#666666] dark:text-[#999999]">
+                        {t.faqSubtitle}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {post.faqs
+                    .filter((f) => f && f.question?.trim() && f.answer?.trim())
+                    .map((faq, idx) => {
+                      const isOpen = !!openFaqIndexes[idx];
+                      return (
+                        <div
+                          key={faq.id || `faq-${idx}`}
+                          className="rounded-[12px] border border-[#E8E8E8] dark:border-[#2A2A28] bg-white dark:bg-[#1A1A18] overflow-hidden transition-all duration-200"
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenFaqIndexes((prev) => ({
+                                ...prev,
+                                [idx]: !prev[idx],
+                              }))
+                            }
+                            className="w-full px-5 py-4 flex items-center justify-between text-left gap-4 hover:bg-[#F9F9F8] dark:hover:bg-[#222220] transition-colors cursor-pointer"
+                          >
+                            <span className="font-semibold text-[15px] md:text-[16px] text-[#111111] dark:text-[#ECECEC]">
+                              {faq.question}
+                            </span>
+                            <div className="shrink-0 p-1 rounded-[6px] text-[#666666] dark:text-[#999999] bg-[#F0F0EE] dark:bg-[#2A2A28]">
+                              {isOpen ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </div>
+                          </button>
+                          {isOpen && (
+                            <div className="px-5 pb-4 pt-1 text-[14px] md:text-[15px] leading-relaxed text-[#555555] dark:text-[#AAAAAA] border-t border-[#F0F0EE] dark:border-[#262624] font-serif-reading">
+                              {faq.answer.split('\n\n').map((paragraph, pIdx) => (
+                                <p key={pIdx} className="mb-2 last:mb-0">
+                                  {paragraph}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </section>
+            )}
 
             {/* Footnotes Section */}
             {post.footnotes && post.footnotes.length > 0 && (

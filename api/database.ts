@@ -64,6 +64,7 @@ function mapPost(row: Record<string, unknown>): Post {
     seoTitle: row.seo_title ? String(row.seo_title) : undefined,
     seoDescription: row.seo_description ? String(row.seo_description) : undefined,
     footnotes: asJson(row.footnotes, []),
+    faqs: asJson(row.faqs, []),
     viewsCount: Number(row.views_count || 0)
   };
 }
@@ -109,7 +110,7 @@ function mapActivity(row: Record<string, unknown>): ActivityLog {
 export async function loadDb(): Promise<DatabaseSchema> {
   const sql = getSql();
   const [posts, categories, tags, media, settingsRows, activity] = await Promise.all([
-    sql`SELECT id, title, slug, excerpt, content, cover_image, cover_image_alt, status, published_at, scheduled_at, created_at, updated_at, reading_time_minutes, word_count, category, tags, is_featured, seo_title, seo_description, footnotes, views_count FROM posts ORDER BY COALESCE(published_at, created_at) DESC`,
+    sql`SELECT id, title, slug, excerpt, content, cover_image, cover_image_alt, status, published_at, scheduled_at, created_at, updated_at, reading_time_minutes, word_count, category, tags, is_featured, seo_title, seo_description, footnotes, faqs, views_count FROM posts ORDER BY COALESCE(published_at, created_at) DESC`,
     sql`SELECT c.id, c.name, c.slug, c.description, COUNT(p.id)::int AS count FROM categories c LEFT JOIN posts p ON LOWER(p.category) = LOWER(c.name) GROUP BY c.id, c.name, c.slug, c.description ORDER BY c.name`,
     sql`SELECT id, name, slug FROM tags ORDER BY name`,
     sql`SELECT id, name, url, alt_text, mime_type, size_bytes, width, height, created_at FROM media ORDER BY created_at DESC`,
@@ -143,7 +144,7 @@ export async function saveDb(db: DatabaseSchema): Promise<void> {
   ];
 
   for (const post of db.posts) {
-    statements.push(sql`INSERT INTO posts (id, title, slug, excerpt, content, cover_image, cover_image_alt, status, published_at, scheduled_at, created_at, updated_at, reading_time_minutes, word_count, category, tags, is_featured, seo_title, seo_description, footnotes, views_count) VALUES (${post.id}, ${post.title}, ${post.slug}, ${post.excerpt}, ${post.content}, ${post.coverImage ?? null}, ${post.coverImageAlt ?? null}, ${post.status}, ${post.publishedAt ?? null}, ${post.scheduledAt ?? null}, ${post.createdAt}, ${post.updatedAt}, ${post.readingTimeMinutes}, ${post.wordCount}, ${post.category}, ${post.tags}, ${post.isFeatured}, ${post.seoTitle ?? null}, ${post.seoDescription ?? null}, ${JSON.stringify(post.footnotes ?? [])}::jsonb, ${post.viewsCount ?? 0})`);
+    statements.push(sql`INSERT INTO posts (id, title, slug, excerpt, content, cover_image, cover_image_alt, status, published_at, scheduled_at, created_at, updated_at, reading_time_minutes, word_count, category, tags, is_featured, seo_title, seo_description, footnotes, faqs, views_count) VALUES (${post.id}, ${post.title}, ${post.slug}, ${post.excerpt}, ${post.content}, ${post.coverImage ?? null}, ${post.coverImageAlt ?? null}, ${post.status}, ${post.publishedAt ?? null}, ${post.scheduledAt ?? null}, ${post.createdAt}, ${post.updatedAt}, ${post.readingTimeMinutes}, ${post.wordCount}, ${post.category}, ${post.tags}, ${post.isFeatured}, ${post.seoTitle ?? null}, ${post.seoDescription ?? null}, ${JSON.stringify(post.footnotes ?? [])}::jsonb, ${JSON.stringify(post.faqs ?? [])}::jsonb, ${post.viewsCount ?? 0})`);
   }
   for (const category of db.categories) {
     statements.push(sql`INSERT INTO categories (id, name, slug, description) VALUES (${category.id}, ${category.name}, ${category.slug}, ${category.description ?? null})`);

@@ -260,7 +260,7 @@ export function createExpressApp() {
     try {
       const {
         title, slug, excerpt, content, category, tags, coverImage, coverImageAlt,
-        status, isFeatured, seoTitle, seoDescription, footnotes
+        status, isFeatured, seoTitle, seoDescription, footnotes, faqs
       } = req.body;
 
       if (!title || !content) {
@@ -305,14 +305,15 @@ export function createExpressApp() {
           viewsCount: 0,
           seoTitle,
           seoDescription,
-          footnotes: footnotes || []
+          footnotes: footnotes || [],
+          faqs: faqs || []
         };
 
         await sql`
           INSERT INTO posts (
             id, title, slug, excerpt, content, category, tags, cover_image, cover_image_alt,
             status, is_featured, published_at, scheduled_at, word_count, reading_time_minutes,
-            views_count, seo_title, seo_description, footnotes, created_at, updated_at
+            views_count, seo_title, seo_description, footnotes, faqs, created_at, updated_at
           ) VALUES (
             ${newPost.id}, ${newPost.title}, ${newPost.slug}, ${newPost.excerpt || ''}, ${newPost.content},
             ${newPost.category}, ${newPost.tags || []}, ${newPost.coverImage || null},
@@ -320,6 +321,7 @@ export function createExpressApp() {
             ${newPost.publishedAt || null}, ${newPost.scheduledAt || null}, ${newPost.wordCount},
             ${newPost.readingTimeMinutes}, ${newPost.viewsCount}, ${newPost.seoTitle || null},
             ${newPost.seoDescription || null}, ${JSON.stringify(newPost.footnotes || [])}::jsonb,
+            ${JSON.stringify(newPost.faqs || [])}::jsonb,
             ${newPost.createdAt}, ${newPost.updatedAt}
           )
         `;
@@ -369,7 +371,8 @@ export function createExpressApp() {
         viewsCount: 0,
         seoTitle,
         seoDescription,
-        footnotes: footnotes || []
+        footnotes: footnotes || [],
+        faqs: faqs || []
       };
 
       db.posts.unshift(newPost);
@@ -398,7 +401,7 @@ export function createExpressApp() {
       const { id } = req.params;
       const {
         title, slug, excerpt, content, category, tags, coverImage, coverImageAlt,
-        status, isFeatured, seoTitle, seoDescription, footnotes, scheduledAt
+        status, isFeatured, seoTitle, seoDescription, footnotes, faqs, scheduledAt
       } = req.body;
 
       const now = new Date().toISOString();
@@ -433,6 +436,7 @@ export function createExpressApp() {
           seoTitle: seoTitle !== undefined ? seoTitle : existing.seoTitle,
           seoDescription: seoDescription !== undefined ? seoDescription : existing.seoDescription,
           footnotes: footnotes !== undefined ? footnotes : existing.footnotes,
+          faqs: faqs !== undefined ? faqs : existing.faqs,
           scheduledAt: scheduledAt !== undefined ? scheduledAt : existing.scheduledAt,
           publishedAt: publishedAt || undefined,
           wordCount,
@@ -459,6 +463,7 @@ export function createExpressApp() {
             seo_title = ${updated.seoTitle || null},
             seo_description = ${updated.seoDescription || null},
             footnotes = ${JSON.stringify(updated.footnotes || [])}::jsonb,
+            faqs = ${JSON.stringify(updated.faqs || [])}::jsonb,
             updated_at = ${updated.updatedAt}
           WHERE id = ${id}
         `;
@@ -497,6 +502,7 @@ export function createExpressApp() {
         seoTitle: seoTitle !== undefined ? seoTitle : existing.seoTitle,
         seoDescription: seoDescription !== undefined ? seoDescription : existing.seoDescription,
         footnotes: footnotes !== undefined ? footnotes : existing.footnotes,
+        faqs: faqs !== undefined ? faqs : existing.faqs,
         scheduledAt: scheduledAt !== undefined ? scheduledAt : existing.scheduledAt,
         publishedAt: isNowPublished && !wasPublished ? now : existing.publishedAt,
         wordCount,

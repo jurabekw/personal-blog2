@@ -6,6 +6,12 @@ export interface Footnote {
   text: string;
 }
 
+export interface FAQItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface TOCItem {
   id: string;
   text: string;
@@ -33,6 +39,7 @@ export interface Post {
   seoTitle?: string;
   seoDescription?: string;
   footnotes?: Footnote[];
+  faqs?: FAQItem[];
   viewsCount?: number;
 }
 

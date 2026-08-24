@@ -96,8 +96,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
     let schema: any = {};
 
     if (type === 'article' && post) {
-      schema = {
-        '@context': 'https://schema.org',
+      const blogPostingSchema: any = {
         '@type': 'BlogPosting',
         headline: post.title,
         description: post.excerpt || pageDescription,
@@ -122,6 +121,35 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
         articleSection: post.category,
         keywords: post.tags?.join(', '),
       };
+
+      const validFaqs = (post.faqs || []).filter(
+        (f) => f && f.question && f.question.trim() && f.answer && f.answer.trim()
+      );
+
+      if (validFaqs.length > 0) {
+        const faqPageSchema = {
+          '@type': 'FAQPage',
+          '@id': `${currentUrl}#faq`,
+          mainEntity: validFaqs.map((faq) => ({
+            '@type': 'Question',
+            name: faq.question.trim(),
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: faq.answer.trim(),
+            },
+          })),
+        };
+
+        schema = {
+          '@context': 'https://schema.org',
+          '@graph': [blogPostingSchema, faqPageSchema],
+        };
+      } else {
+        schema = {
+          '@context': 'https://schema.org',
+          ...blogPostingSchema,
+        };
+      }
     } else {
       schema = {
         '@context': 'https://schema.org',

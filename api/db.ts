@@ -77,6 +77,7 @@ export async function initNeonTables(): Promise<boolean> {
         seo_title TEXT,
         seo_description TEXT,
         footnotes JSONB DEFAULT '[]'::jsonb,
+        faqs JSONB DEFAULT '[]'::jsonb,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -173,6 +174,7 @@ export async function initNeonTables(): Promise<boolean> {
       await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS seo_title TEXT`;
       await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS seo_description TEXT`;
       await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS footnotes JSONB DEFAULT '[]'::jsonb`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS faqs JSONB DEFAULT '[]'::jsonb`;
       await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS views_count BIGINT DEFAULT 0`;
     } catch {
       // ignore
@@ -238,13 +240,14 @@ export async function initNeonTables(): Promise<boolean> {
           INSERT INTO posts (
             id, title, slug, excerpt, content, category, tags, cover_image, cover_image_alt,
             status, is_featured, published_at, word_count, reading_time_minutes, views_count,
-            seo_title, seo_description, footnotes, created_at, updated_at
+            seo_title, seo_description, footnotes, faqs, created_at, updated_at
           ) VALUES (
             ${p.id}, ${p.title}, ${p.slug}, ${p.excerpt || ''}, ${p.content}, ${p.category},
             ${p.tags || []}, ${p.coverImage || null}, ${p.coverImageAlt || null},
             ${p.status || 'published'}, ${Boolean(p.isFeatured)}, ${p.publishedAt || new Date().toISOString()},
             ${p.wordCount || 0}, ${p.readingTimeMinutes || 1}, ${p.viewsCount || 0},
             ${p.seoTitle || null}, ${p.seoDescription || null}, ${JSON.stringify(p.footnotes || [])}::jsonb,
+            ${JSON.stringify(p.faqs || [])}::jsonb,
             ${p.createdAt || new Date().toISOString()}, ${p.updatedAt || new Date().toISOString()}
           ) ON CONFLICT (id) DO NOTHING;
         `;
@@ -392,6 +395,7 @@ export function mapRowToPost(row: any): Post {
     seoTitle: row.seo_title || undefined,
     seoDescription: row.seo_description || undefined,
     footnotes: Array.isArray(row.footnotes) ? row.footnotes : (typeof row.footnotes === 'string' ? JSON.parse(row.footnotes) : []),
+    faqs: Array.isArray(row.faqs) ? row.faqs : (typeof row.faqs === 'string' ? JSON.parse(row.faqs) : []),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   };

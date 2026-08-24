@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Post, Category, Tag, MediaItem } from '../../types';
+import { Post, Category, Tag, MediaItem, FAQItem } from '../../types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
@@ -7,6 +7,9 @@ import { Select } from '../ui/Select';
 import { Badge } from '../ui/Badge';
 import { Card } from '../ui/Card';
 import { useToast } from '../ui/Toast';
+import { FormattedTable } from '../ui/FormattedTable';
+import { parseMarkdownTable, renderInlineMarkdown } from '../ui/MarkdownTable';
+import { MarkdownContent } from '../ui/MarkdownContent';
 import {
   ArrowLeft,
   Save,
@@ -19,8 +22,10 @@ import {
   Quote,
   Code,
   List,
+  ListOrdered,
   Image as ImageIcon,
   Link as LinkIcon,
+  Table as TableIcon,
   Check,
   Clock,
   Sparkles,
@@ -29,7 +34,9 @@ import {
   X,
   Search,
   Globe,
-  FileText
+  FileText,
+  HelpCircle,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminPostEditorViewProps {
@@ -68,6 +75,7 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
   const [seoTitle, setSeoTitle] = useState(post?.seoTitle || '');
   const [seoDescription, setSeoDescription] = useState(post?.seoDescription || '');
   const [scheduledAt, setScheduledAt] = useState(post?.scheduledAt || '');
+  const [faqs, setFaqs] = useState<FAQItem[]>(post?.faqs || []);
 
   const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('edit');
   const [isSaving, setIsSaving] = useState(false);
@@ -86,7 +94,7 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
   // Autosave status tracking
   useEffect(() => {
     setIsDirty(true);
-  }, [title, slug, excerpt, content, category, tags, status, isFeatured, coverImage, seoTitle, seoDescription]);
+  }, [title, slug, excerpt, content, category, tags, status, isFeatured, coverImage, seoTitle, seoDescription, faqs]);
 
   // Real-time word count & reading time
   const { wordCount, readingTimeMinutes } = useMemo(() => {
@@ -125,6 +133,27 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
     setTags(tags.filter((item) => item !== t));
   };
 
+  const handleAddFaq = () => {
+    setFaqs([
+      ...faqs,
+      {
+        id: `faq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        question: '',
+        answer: '',
+      },
+    ]);
+  };
+
+  const handleUpdateFaq = (index: number, field: 'question' | 'answer', value: string) => {
+    setFaqs(
+      faqs.map((item, idx) => (idx === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleRemoveFaq = (index: number) => {
+    setFaqs(faqs.filter((_, idx) => idx !== index));
+  };
+
   const handleSaveSubmit = async (overrideStatus?: 'draft' | 'published') => {
     if (!title.trim()) {
       toast('Title required', 'Please enter a title before saving', 'error');
@@ -154,6 +183,7 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
         seoTitle,
         seoDescription,
         scheduledAt,
+        faqs: faqs.filter((f) => f.question?.trim() || f.answer?.trim()),
       });
 
       setStatus(targetStatus);
@@ -305,6 +335,23 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
               <span className="w-px h-4 bg-[#E8E8E8] dark:bg-[#333330] mx-1" />
               <button
                 type="button"
+                onClick={() => insertFormatting('- ')}
+                className="p-1.5 hover:text-[#111111] dark:hover:text-white rounded hover:bg-black/5"
+                title="Bullet List (- )"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertFormatting('1. ')}
+                className="p-1.5 hover:text-[#111111] dark:hover:text-white rounded hover:bg-black/5"
+                title="Numbered List (1. )"
+              >
+                <ListOrdered className="w-4 h-4" />
+              </button>
+              <span className="w-px h-4 bg-[#E8E8E8] dark:bg-[#333330] mx-1" />
+              <button
+                type="button"
                 onClick={() => insertFormatting('> ')}
                 className="p-1.5 hover:text-[#111111] dark:hover:text-white rounded hover:bg-black/5"
                 title="Blockquote"
@@ -326,6 +373,14 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
                 title="Hyperlink"
               >
                 <LinkIcon className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertFormatting('\n| Ko\'nikma | Targetolog | Digital marketolog |\n| :--- | :---: | :---: |\n| Meta Ads sozlash | ✅ | ✅ |\n| Reklama auditoriyasini tanlash | ✅ | ✅ |\n| Funnel bilan ishlash | Ba\'zan | ✅ |\n')}
+                className="p-1.5 hover:text-[#111111] dark:hover:text-white rounded hover:bg-black/5"
+                title="Insert Table"
+              >
+                <TableIcon className="w-4 h-4" />
               </button>
               <span className="w-px h-4 bg-[#E8E8E8] dark:bg-[#333330] mx-1" />
               <button
@@ -384,10 +439,138 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
                     />
                   )}
 
-                  <div className="font-serif-reading text-[18px] leading-[1.8] text-[#111111] dark:text-[#ECECEC] whitespace-pre-wrap">
-                    {content || 'Start typing in the write panel to see live preview.'}
-                  </div>
+                  <MarkdownContent
+                    content={content}
+                    isEditorPreview={true}
+                  />
+
+                  {/* FAQ Preview in Preview Box */}
+                  {faqs.filter((f) => f.question.trim() && f.answer.trim()).length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-[#E8E8E8] dark:border-[#2A2A28] flex flex-col gap-3">
+                      <div className="flex items-center gap-2 font-serif text-[20px] font-bold text-[#111111] dark:text-[#ECECEC]">
+                        <HelpCircle className="w-5 h-5 text-[#1E3E62] dark:text-blue-400" />
+                        <span>Ko'p beriladigan savollar (FAQ Preview)</span>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        {faqs
+                          .filter((f) => f.question.trim() && f.answer.trim())
+                          .map((faq, fIdx) => (
+                            <div
+                              key={fIdx}
+                              className="p-4 rounded-[8px] bg-[#FAFAF8] dark:bg-[#222220] border border-[#E8E8E8] dark:border-[#2E2E2C]"
+                            >
+                              <p className="font-semibold text-[15px] text-[#111111] dark:text-[#ECECEC]">
+                                {faq.question}
+                              </p>
+                              <p className="text-[14px] text-[#555555] dark:text-[#AAAAAA] mt-1 font-serif-reading">
+                                {faq.answer}
+                              </p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* FAQ Accordion Block (Schema.org FAQPage Builder) */}
+          <div className="rounded-[12px] border border-[#E8E8E8] dark:border-[#2A2A28] bg-white dark:bg-[#1A1A18] p-5 flex flex-col gap-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E8E8] dark:border-[#2A2A28]">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <div className="p-2 rounded-[8px] bg-[#1E3E62]/10 dark:bg-blue-500/10 text-[#1E3E62] dark:text-blue-400 shrink-0 mt-0.5 sm:mt-0">
+                  <HelpCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-[15px] font-semibold text-[#111111] dark:text-[#ECECEC]">
+                      FAQ Block (Savol-Javoblar)
+                    </h4>
+                    {faqs.length > 0 && (
+                      <Badge variant="accent">
+                        {faqs.length} ta savol
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-[#666666] dark:text-[#999999] mt-0.5">
+                    Google uchun avtomatik <code className="px-1.5 py-0.5 rounded bg-[#F0F0EE] dark:bg-[#2A2A28] font-mono text-[11px] text-[#1E3E62] dark:text-blue-400">FAQPage Schema.org</code> va maqola oxirida interaktiv akkordeon yaratadi.
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleAddFaq}
+                className="gap-1 text-[13px] self-start sm:self-auto cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Savol qo'shish</span>
+              </Button>
+            </div>
+
+            {faqs.length === 0 ? (
+              <div className="p-6 rounded-[10px] border border-dashed border-[#D5D5D3] dark:border-[#333330] text-center flex flex-col items-center justify-center gap-2 bg-[#FAFAF8] dark:bg-[#151513]">
+                <HelpCircle className="w-7 h-7 text-[#999999]" />
+                <p className="text-[13px] text-[#666666] dark:text-[#999999]">
+                  Ushbu maqola uchun FAQ savollari hali qo'shilmagan.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddFaq}
+                  className="gap-1 mt-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Birinchi savolni qo'shish</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3.5">
+                {faqs.map((faq, idx) => (
+                  <div
+                    key={faq.id || `faq-${idx}`}
+                    className="p-4 rounded-[10px] bg-[#FBFBFA] dark:bg-[#20201E] border border-[#E8E8E8] dark:border-[#2E2E2C] flex flex-col gap-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-[#1E3E62] dark:text-blue-400 uppercase tracking-wide">
+                        #{idx + 1}-savol
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFaq(idx)}
+                        className="text-[#999999] hover:text-red-500 transition-colors p-1.5 rounded hover:bg-red-500/10 cursor-pointer"
+                        title="Savolni o'chirish"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[12px] font-medium text-[#555555] dark:text-[#AAAAAA]">
+                        Savol:
+                      </label>
+                      <Input
+                        placeholder="Masalan: Ushbu usulning asosiy afzalligi nimada?"
+                        value={faq.question}
+                        onChange={(e) => handleUpdateFaq(idx, 'question', e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[12px] font-medium text-[#555555] dark:text-[#AAAAAA]">
+                        Javob:
+                      </label>
+                      <Textarea
+                        rows={2}
+                        placeholder="Batafsil va tushunarli javob matni..."
+                        value={faq.answer}
+                        onChange={(e) => handleUpdateFaq(idx, 'answer', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -569,9 +752,16 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
 
               {/* Live Google SERP Preview Card */}
               <div className="p-3.5 rounded-[10px] bg-[#F8F9FA] dark:bg-[#1E1E1C] border border-[#E1E3E6] dark:border-[#2C2C2A] flex flex-col gap-1 text-[13px]">
-                <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#5F6368] dark:text-[#9AA0A6]">
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>Google Search Result Preview</span>
+                <div className="flex items-center justify-between text-[11px] font-medium text-[#5F6368] dark:text-[#9AA0A6]">
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Google Search Result Preview</span>
+                  </span>
+                  {faqs.filter((f) => f.question.trim() && f.answer.trim()).length > 0 && (
+                    <span className="text-[#1E3E62] dark:text-blue-400 font-semibold">
+                      + FAQPage Schema
+                    </span>
+                  )}
                 </div>
                 <div className="font-normal text-[16px] text-[#1a0dab] dark:text-[#8ab4f8] hover:underline cursor-pointer truncate line-clamp-1">
                   {seoTitle || title || 'Untitled Article'} — Jurabek
