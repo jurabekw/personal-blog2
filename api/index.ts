@@ -324,10 +324,14 @@ export function createExpressApp() {
           )
         `;
 
-        // Update category count
-        await sql`
-          UPDATE categories SET count = count + 1 WHERE LOWER(name) = LOWER(${newPost.category})
-        `;
+        // Try to update static category count column if present
+        try {
+          await sql`
+            UPDATE categories SET count = count + 1 WHERE LOWER(name) = LOWER(${newPost.category})
+          `;
+        } catch {
+          // ignore if categories table doesn't have count column
+        }
 
         // Record activity log safely
         await logActivity(
@@ -566,7 +570,14 @@ export function createExpressApp() {
       const sql = getSqlClient();
       if (sql) {
         await initNeonTables();
-        const rows = await sql`SELECT * FROM categories ORDER BY name ASC`;
+        const rows = await sql`
+          SELECT c.id, c.name, c.slug, COALESCE(c.description, '') AS description,
+                 COUNT(p.id)::int AS count
+          FROM categories c
+          LEFT JOIN posts p ON LOWER(p.category) = LOWER(c.name)
+          GROUP BY c.id, c.name, c.slug, c.description
+          ORDER BY c.name ASC
+        `;
         return res.json(rows);
       }
       const db = loadLocalDb();
@@ -595,8 +606,9 @@ export function createExpressApp() {
       if (sql) {
         await initNeonTables();
         await sql`
-          INSERT INTO categories (id, name, slug, description, count)
-          VALUES (${newCategory.id}, ${newCategory.name}, ${newCategory.slug}, ${newCategory.description || ''}, 0)
+          INSERT INTO categories (id, name, slug, description)
+          VALUES (${newCategory.id}, ${newCategory.name}, ${newCategory.slug}, ${newCategory.description || ''})
+          ON CONFLICT (id) DO NOTHING
         `;
         return res.status(201).json(newCategory);
       }
@@ -787,9 +799,11 @@ export function createExpressApp() {
       const sql = getSqlClient();
       if (sql) {
         await initNeonTables();
-        const rows = await sql`SELECT value FROM site_settings WHERE key = 'main' LIMIT 1`;
-        if (rows && rows.length > 0) {
-          const val = typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value;
+        const rows = await sql`
+          SELECT COALESCE(payload, value) as data FROM site_settings LIMIT 1
+        `;
+        if (rows && rows.length > 0 && rows[0].data) {
+          const val = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
           return res.json(val);
         }
       }
@@ -806,15 +820,24 @@ export function createExpressApp() {
       const sql = getSqlClient();
       if (sql) {
         await initNeonTables();
-        const currentRows = await sql`SELECT value FROM site_settings WHERE key = 'main' LIMIT 1`;
-        const current = currentRows[0]?.value ? (typeof currentRows[0].value === 'string' ? JSON.parse(currentRows[0].value) : currentRows[0].value) : {};
+        const currentRows = await sql`SELECT COALESCE(payload, value) as data FROM site_settings LIMIT 1`;
+        const current = currentRows[0]?.data ? (typeof currentRows[0].data === 'string' ? JSON.parse(currentRows[0].data) : currentRows[0].data) : {};
         const updated = { ...current, ...req.body };
+        const updatedJson = JSON.stringify(updated);
 
-        await sql`
-          INSERT INTO site_settings (key, value)
-          VALUES ('main', ${JSON.stringify(updated)}::jsonb)
-          ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(updated)}::jsonb
-        `;
+        try {
+          await sql`
+            INSERT INTO site_settings (singleton, payload, updated_at)
+            VALUES (1, ${updatedJson}::jsonb, NOW())
+            ON CONFLICT (singleton) DO UPDATE SET payload = ${updatedJson}::jsonb, updated_at = NOW()
+          `;
+        } catch {
+          await sql`
+            INSERT INTO site_settings (key, value)
+            VALUES ('main', ${updatedJson}::jsonb)
+            ON CONFLICT (key) DO UPDATE SET value = ${updatedJson}::jsonb
+          `;
+        }
 
         await logActivity('Settings Updated', 'Updated site configuration settings', 'settings');
 

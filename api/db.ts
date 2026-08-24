@@ -135,7 +135,7 @@ export async function initNeonTables(): Promise<boolean> {
       );
     `;
 
-    // Ensure compatibility if table already existed without 'timestamp' or 'created_at' column
+    // Ensure compatibility if table already existed without any expected columns
     try {
       await sql`ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ DEFAULT NOW()`;
       await sql`ALTER TABLE activity_logs ALTER COLUMN timestamp DROP NOT NULL`;
@@ -152,11 +152,28 @@ export async function initNeonTables(): Promise<boolean> {
     }
     try {
       await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS singleton SMALLINT DEFAULT 1`;
+      await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS payload JSONB`;
+      await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS key VARCHAR(100)`;
+      await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS value JSONB`;
     } catch {
       // ignore
     }
     try {
-      await sql`ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS payload JSONB`;
+      await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS count INT DEFAULT 0`;
+      await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`;
+      await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`;
+    } catch {
+      // ignore
+    }
+    try {
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS cover_image TEXT`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS cover_image_alt TEXT`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS seo_title TEXT`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS seo_description TEXT`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS footnotes JSONB DEFAULT '[]'::jsonb`;
+      await sql`ALTER TABLE posts ADD COLUMN IF NOT EXISTS views_count BIGINT DEFAULT 0`;
     } catch {
       // ignore
     }
@@ -235,8 +252,8 @@ export async function initNeonTables(): Promise<boolean> {
 
       for (const c of initialCategories) {
         await sql`
-          INSERT INTO categories (id, name, slug, description, count)
-          VALUES (${c.id}, ${c.name}, ${c.slug}, ${c.description || ''}, ${c.count || 0})
+          INSERT INTO categories (id, name, slug, description)
+          VALUES (${c.id}, ${c.name}, ${c.slug}, ${c.description || ''})
           ON CONFLICT (id) DO NOTHING;
         `;
       }
@@ -257,11 +274,20 @@ export async function initNeonTables(): Promise<boolean> {
         `;
       }
 
-      await sql`
-        INSERT INTO site_settings (key, value, singleton, payload)
-        VALUES ('main', ${JSON.stringify(initialSettings)}::jsonb, 1, ${JSON.stringify(initialSettings)}::jsonb)
-        ON CONFLICT (key) DO NOTHING;
-      `;
+      const settingsJson = JSON.stringify(initialSettings);
+      try {
+        await sql`
+          INSERT INTO site_settings (singleton, payload, updated_at)
+          VALUES (1, ${settingsJson}::jsonb, NOW())
+          ON CONFLICT (singleton) DO NOTHING;
+        `;
+      } catch {
+        await sql`
+          INSERT INTO site_settings (key, value)
+          VALUES ('main', ${settingsJson}::jsonb)
+          ON CONFLICT (key) DO NOTHING;
+        `;
+      }
     }
 
     tablesInitialized = true;
