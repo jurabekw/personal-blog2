@@ -4,6 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jurabek — Personal Writing & Publishing Platform</title>
+    <script>
+      (function() {
+        try {
+          var w = window;
+          var getDesc = function(obj, prop) {
+            while (obj) {
+              var d = Object.getOwnPropertyDescriptor(obj, prop);
+              if (d) return d;
+              obj = Object.getPrototypeOf(obj);
+            }
+            return null;
+          };
+          var desc = getDesc(w, 'fetch');
+          if (desc && desc.get && !desc.set) {
+            var currentFetch = w.fetch;
+            Object.defineProperty(w, 'fetch', {
+              get: function() { return currentFetch; },
+              set: function(fn) { currentFetch = fn; },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {
+          // ignore error
+        }
+      })();
+    </script>
     <meta name="description" content="Dizayn, dasturiy ta'minot arxitekturasi va raqamli mahorat haqida insholar va shaxsiy qaydlar." />
     
     <!-- Open Graph / Facebook / Telegram / WhatsApp -->

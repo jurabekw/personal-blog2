@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { parseMarkdownTable } from './MarkdownTable';
 import { FormattedTable } from './FormattedTable';
 import { renderInlineMarkdown } from './MarkdownTable';
@@ -14,29 +14,46 @@ interface MarkdownContentProps {
 }
 
 interface ParsedBlock {
-  type: 'h2' | 'h3' | 'quote' | 'code' | 'divider' | 'table' | 'bullet-list' | 'ordered-list' | 'paragraph';
+  type:
+    | 'h1'
+    | 'h2'
+    | 'h3'
+    | 'h4'
+    | 'quote'
+    | 'code'
+    | 'divider'
+    | 'table'
+    | 'bullet-list'
+    | 'ordered-list'
+    | 'image'
+    | 'paragraph';
   content?: string;
   items?: string[];
   lang?: string;
+  imageUrl?: string;
+  imageAlt?: string;
   tableData?: ReturnType<typeof parseMarkdownTable>;
 }
 
-// Regex to detect if a line starts a list item (e.g. "* ", "- ", "+ ", "• ", "1. ", "1) ")
-const BULLET_REGEX = /^[\*\-\+•]\s+(.*)$/;
-const ORDERED_REGEX = /^(\d+[\.\)])\s+(.*)$/;
+const BULLET_PREFIX_REGEX = /^[\*\-\+•]\s+(.*)$/;
+const ORDERED_PREFIX_REGEX = /^(\d+[\.\)])\s+(.*)$/;
+const DIVIDER_REGEX = /^(\-{3,}|\*{3,}|_{3,})$/;
+const IMAGE_REGEX = /^!\[([^\]]*)\]\(([^)\s]+)\)$/;
 
 export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
   if (!rawContent || !rawContent.trim()) return [];
 
   const lines = rawContent.replace(/\r\n/g, '\n').split('\n');
   const blocks: ParsedBlock[] = [];
+  const numLines = lines.length;
 
   let i = 0;
-  while (i < lines.length) {
+  while (i < numLines) {
+    const startI = i;
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Skip empty lines
+    // Skip blank lines
     if (!trimmed) {
       i++;
       continue;
@@ -48,11 +65,11 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
       const lang = langMatch ? langMatch[1] || 'text' : 'text';
       const codeLines: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+      while (i < numLines && !lines[i].trim().startsWith('```')) {
         codeLines.push(lines[i]);
         i++;
       }
-      if (i < lines.length && lines[i].trim().startsWith('```')) {
+      if (i < numLines && lines[i].trim().startsWith('```')) {
         i++; // skip closing ```
       }
       blocks.push({
@@ -63,28 +80,35 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
       continue;
     }
 
-    // 2. Heading 2 (## )
-    if (trimmed.startsWith('## ')) {
+    // 2. Headings (#, ##, ###, ####)
+    if (trimmed.startsWith('#')) {
+      const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const text = headingMatch[2].trim();
+        if (level === 1) blocks.push({ type: 'h1', content: text });
+        else if (level === 2) blocks.push({ type: 'h2', content: text });
+        else if (level === 3) blocks.push({ type: 'h3', content: text });
+        else blocks.push({ type: 'h4', content: text });
+        i++;
+        continue;
+      }
+    }
+
+    // 3. Standalone Image (![alt](url))
+    const imageMatch = trimmed.match(IMAGE_REGEX);
+    if (imageMatch) {
       blocks.push({
-        type: 'h2',
-        content: trimmed.replace(/^##\s+/, '').trim(),
+        type: 'image',
+        imageAlt: imageMatch[1] || '',
+        imageUrl: imageMatch[2],
       });
       i++;
       continue;
     }
 
-    // 3. Heading 3 (### )
-    if (trimmed.startsWith('### ')) {
-      blocks.push({
-        type: 'h3',
-        content: trimmed.replace(/^###\s+/, '').trim(),
-      });
-      i++;
-      continue;
-    }
-
-    // 4. Horizontal Divider (--- or *** or ___)
-    if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+    // 4. Horizontal Divider (---, ***, ___)
+    if (DIVIDER_REGEX.test(trimmed)) {
       blocks.push({ type: 'divider' });
       i++;
       continue;
@@ -93,7 +117,7 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
     // 5. Blockquote (> )
     if (trimmed.startsWith('>')) {
       const quoteLines: string[] = [];
-      while (i < lines.length && lines[i].trim().startsWith('>')) {
+      while (i < numLines && lines[i].trim().startsWith('>')) {
         quoteLines.push(lines[i].trim().replace(/^>\s*/, ''));
         i++;
       }
@@ -104,23 +128,22 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
       continue;
     }
 
-    // 6. Markdown Table (starts with | and has separator on line 2)
-    if (trimmed.startsWith('|')) {
+    // 6. Markdown Table (| header | header |)
+    if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
       const tableLines: string[] = [];
-      while (i < lines.length && lines[i].trim().startsWith('|')) {
+      while (i < numLines && lines[i].trim().startsWith('|')) {
         tableLines.push(lines[i].trim());
         i++;
       }
       const tableRaw = tableLines.join('\n');
       const parsedTable = parseMarkdownTable(tableRaw);
-      if (parsedTable) {
+      if (parsedTable && parsedTable.headers.length > 0) {
         blocks.push({
           type: 'table',
           tableData: parsedTable,
         });
         continue;
       } else {
-        // Fallback to paragraph if table format is invalid
         blocks.push({
           type: 'paragraph',
           content: tableRaw,
@@ -130,18 +153,24 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
     }
 
     // 7. Bullet List (- , * , + , • )
-    if (BULLET_REGEX.test(trimmed)) {
+    if (BULLET_PREFIX_REGEX.test(trimmed)) {
       const items: string[] = [];
-      while (i < lines.length) {
+      while (i < numLines) {
         const currTrimmed = lines[i].trim();
-        if (!currTrimmed) break; // empty line terminates list
+        if (!currTrimmed) break;
 
-        const match = currTrimmed.match(BULLET_REGEX);
+        const match = currTrimmed.match(BULLET_PREFIX_REGEX);
         if (match) {
           items.push(match[1].trim());
           i++;
-        } else if (items.length > 0 && !currTrimmed.startsWith('#') && !currTrimmed.startsWith('>') && !currTrimmed.startsWith('|') && !ORDERED_REGEX.test(currTrimmed)) {
-          // Continued multiline list item
+        } else if (
+          items.length > 0 &&
+          !currTrimmed.startsWith('#') &&
+          !currTrimmed.startsWith('>') &&
+          !currTrimmed.startsWith('|') &&
+          !currTrimmed.startsWith('```') &&
+          !ORDERED_PREFIX_REGEX.test(currTrimmed)
+        ) {
           items[items.length - 1] += ' ' + currTrimmed;
           i++;
         } else {
@@ -156,18 +185,24 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
     }
 
     // 8. Numbered List (1. , 1) )
-    if (ORDERED_REGEX.test(trimmed)) {
+    if (ORDERED_PREFIX_REGEX.test(trimmed)) {
       const items: string[] = [];
-      while (i < lines.length) {
+      while (i < numLines) {
         const currTrimmed = lines[i].trim();
-        if (!currTrimmed) break; // empty line terminates list
+        if (!currTrimmed) break;
 
-        const match = currTrimmed.match(ORDERED_REGEX);
+        const match = currTrimmed.match(ORDERED_PREFIX_REGEX);
         if (match) {
           items.push(match[2].trim());
           i++;
-        } else if (items.length > 0 && !currTrimmed.startsWith('#') && !currTrimmed.startsWith('>') && !currTrimmed.startsWith('|') && !BULLET_REGEX.test(currTrimmed)) {
-          // Continued multiline list item
+        } else if (
+          items.length > 0 &&
+          !currTrimmed.startsWith('#') &&
+          !currTrimmed.startsWith('>') &&
+          !currTrimmed.startsWith('|') &&
+          !currTrimmed.startsWith('```') &&
+          !BULLET_PREFIX_REGEX.test(currTrimmed)
+        ) {
           items[items.length - 1] += ' ' + currTrimmed;
           i++;
         } else {
@@ -181,23 +216,24 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
       continue;
     }
 
-    // 9. Standard Paragraph (consume consecutive text lines until empty line or next block element)
+    // 9. Standard Paragraph (collect consecutive text lines)
     const pLines: string[] = [];
-    while (i < lines.length) {
+    while (i < numLines) {
       const curr = lines[i];
       const currTrimmed = curr.trim();
 
-      if (!currTrimmed) break; // paragraph separator
+      if (!currTrimmed) break;
 
-      // Check if next line is a special block element
+      // Check if current line begins a distinct block element
       if (
         currTrimmed.startsWith('#') ||
         currTrimmed.startsWith('```') ||
         currTrimmed.startsWith('>') ||
-        currTrimmed.startsWith('|') ||
-        /^(\-{3,}|\*{3,}|_{3,})$/.test(currTrimmed) ||
-        BULLET_REGEX.test(currTrimmed) ||
-        ORDERED_REGEX.test(currTrimmed)
+        (currTrimmed.startsWith('|') && currTrimmed.includes('|', 1)) ||
+        DIVIDER_REGEX.test(currTrimmed) ||
+        BULLET_PREFIX_REGEX.test(currTrimmed) ||
+        ORDERED_PREFIX_REGEX.test(currTrimmed) ||
+        IMAGE_REGEX.test(currTrimmed)
       ) {
         break;
       }
@@ -207,24 +243,21 @@ export function parseMarkdownBlocks(rawContent: string): ParsedBlock[] {
     }
 
     if (pLines.length > 0) {
-      const paragraphText = pLines.join(' ');
-      // Secondary check: inline bullet points separated by * inside a single paragraph line
-      // e.g. "* muammolari; * ehtiyojlari; * xarid qilish motivlari"
-      if (paragraphText.startsWith('* ') || paragraphText.startsWith('- ') || paragraphText.startsWith('• ')) {
-        const inlineSplits = paragraphText.split(/(?=(?:^|\s)(?:[\*\-•]\s|\d+[\.\)]\s))/g).map(s => s.trim()).filter(Boolean);
-        if (inlineSplits.length > 1 && inlineSplits.every(s => /^[\*\-•]\s+/.test(s))) {
-          blocks.push({
-            type: 'bullet-list',
-            items: inlineSplits.map(s => s.replace(/^[\*\-•]\s+/, '').trim()),
-          });
-          continue;
-        }
-      }
-
       blocks.push({
         type: 'paragraph',
-        content: paragraphText,
+        content: pLines.join(' '),
       });
+    }
+
+    // Strict safety invariant: guarantee that `i` always moves forward!
+    if (i === startI) {
+      // If for any unforeseen reason no branch consumed the current line,
+      // consume it as a fallback paragraph and advance.
+      blocks.push({
+        type: 'paragraph',
+        content: lines[i].trim(),
+      });
+      i++;
     }
   }
 
@@ -239,6 +272,8 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({
   copyLabel = 'Nusxalash',
   isEditorPreview = false,
 }) => {
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
+
   if (!content || !content.trim()) {
     return isEditorPreview ? (
       <p className="font-serif-reading text-[18px] text-[#888888] dark:text-[#777777] italic">
@@ -247,11 +282,26 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({
     ) : null;
   }
 
-  const blocks = parseMarkdownBlocks(content);
-
   return (
     <div className="flex flex-col">
       {blocks.map((block, idx) => {
+        // Heading 1
+        if (block.type === 'h1') {
+          const text = block.content || '';
+          const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          return (
+            <h1
+              key={idx}
+              id={id}
+              className={`font-serif ${
+                isEditorPreview ? 'text-[28px] mt-6 mb-3' : 'text-[32px] md:text-[36px] mt-10 mb-4'
+              } font-bold text-[#111111] dark:text-[#ECECEC] scroll-mt-24`}
+            >
+              {text}
+            </h1>
+          );
+        }
+
         // Heading 2
         if (block.type === 'h2') {
           const text = block.content || '';
@@ -261,7 +311,7 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({
               key={idx}
               id={id}
               className={`font-serif ${
-                isEditorPreview ? 'text-[26px] mt-6 mb-3' : 'text-[28px] md:text-[32px] mt-10 mb-4'
+                isEditorPreview ? 'text-[24px] mt-6 mb-3' : 'text-[26px] md:text-[30px] mt-10 mb-4'
               } font-semibold text-[#111111] dark:text-[#ECECEC] scroll-mt-24`}
             >
               {text}
@@ -283,6 +333,42 @@ export const MarkdownContent: React.FC<MarkdownContentProps> = ({
             >
               {text}
             </h3>
+          );
+        }
+
+        // Heading 4
+        if (block.type === 'h4') {
+          const text = block.content || '';
+          const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          return (
+            <h4
+              key={idx}
+              id={id}
+              className={`font-serif ${
+                isEditorPreview ? 'text-[17px] mt-4 mb-2' : 'text-[18px] md:text-[20px] mt-6 mb-2.5'
+              } font-semibold text-[#111111] dark:text-[#ECECEC] scroll-mt-24`}
+            >
+              {text}
+            </h4>
+          );
+        }
+
+        // Standalone Image
+        if (block.type === 'image' && block.imageUrl) {
+          return (
+            <figure key={idx} className="my-6">
+              <img
+                src={block.imageUrl}
+                alt={block.imageAlt || ''}
+                referrerPolicy="no-referrer"
+                className="w-full h-auto rounded-[10px] border border-[#E8E8E8] dark:border-[#2A2A28] object-cover max-h-[440px]"
+              />
+              {block.imageAlt && (
+                <figcaption className="text-center text-[13px] text-[#666666] dark:text-[#999999] mt-2 font-serif italic">
+                  {block.imageAlt}
+                </figcaption>
+              )}
+            </figure>
           );
         }
 

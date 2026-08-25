@@ -5,8 +5,6 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Avatar } from '../ui/Avatar';
 import { useToast } from '../ui/Toast';
-import { FormattedTable } from '../ui/FormattedTable';
-import { parseMarkdownTable, renderInlineMarkdown } from '../ui/MarkdownTable';
 import { MarkdownContent } from '../ui/MarkdownContent';
 import {
   Calendar,
@@ -168,107 +166,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       toast(t.copied, t.linkCopiedDesc, 'success');
       setTimeout(() => setCopiedCodeId(null), 2000);
     }
-  };
-
-  // Render content with basic Markdown styling & code blocks
-  const renderFormattedContent = (content: string) => {
-    const paragraphs = content.split('\n\n');
-
-    return paragraphs.map((block, idx) => {
-      // Heading 2
-      if (block.startsWith('## ')) {
-        const text = block.replace('## ', '').trim();
-        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        return (
-          <h2 key={idx} id={id} className="font-serif text-[28px] md:text-[32px] font-semibold text-[#111111] dark:text-[#ECECEC] mt-10 mb-4 scroll-mt-24">
-            {text}
-          </h2>
-        );
-      }
-
-      // Heading 3
-      if (block.startsWith('### ')) {
-        const text = block.replace('### ', '').trim();
-        const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        return (
-          <h3 key={idx} id={id} className="font-serif text-[22px] md:text-[24px] font-semibold text-[#111111] dark:text-[#ECECEC] mt-8 mb-3 scroll-mt-24">
-            {text}
-          </h3>
-        );
-      }
-
-      // Blockquote
-      if (block.startsWith('> ')) {
-        const quoteText = block.replace(/^>\s*/gm, '').trim();
-        return (
-          <blockquote key={idx} className="my-6 pl-5 border-l-2 border-[#1E3E62] dark:border-blue-500 font-serif-reading text-[20px] italic text-[#444444] dark:text-[#BBBBBB]">
-            {quoteText}
-          </blockquote>
-        );
-      }
-
-      // Code Block
-      if (block.startsWith('```')) {
-        const lines = block.split('\n');
-        const langMatch = lines[0].match(/```(\w+)?/);
-        const lang = langMatch ? langMatch[1] || 'text' : 'text';
-        const codeText = lines.slice(1, -1).join('\n');
-        const blockId = `code-${idx}`;
-
-        return (
-          <div key={idx} className="my-6 rounded-[10px] overflow-hidden border border-[#E8E8E8] dark:border-[#2A2A28] bg-[#1A1A18] text-[#ECECEC] text-[14px] font-mono">
-            <div className="flex items-center justify-between px-4 py-2 bg-[#242422] border-b border-[#333330] text-[12px] text-[#A0A09C]">
-              <span>{lang.toUpperCase()}</span>
-              <button
-                onClick={() => handleCopyCode(codeText, blockId)}
-                className="flex items-center gap-1.5 hover:text-white transition-colors"
-              >
-                {copiedCodeId === blockId ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-emerald-400">{t.copied}</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>{t.copy}</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <pre className="p-4 overflow-x-auto leading-relaxed font-mono">
-              <code>{codeText}</code>
-            </pre>
-          </div>
-        );
-      }
-
-      // Divider
-      if (block.trim() === '---') {
-        return <hr key={idx} className="my-8 border-[#E8E8E8] dark:border-[#2A2A28]" />;
-      }
-
-      // Markdown Table
-      if (block.trim().startsWith('|')) {
-        const parsedTable = parseMarkdownTable(block);
-        if (parsedTable) {
-          return (
-            <FormattedTable
-              key={idx}
-              headers={parsedTable.headers}
-              rows={parsedTable.rows}
-            />
-          );
-        }
-      }
-
-      // Standard paragraph with inline formatting (bold, code, links)
-      return (
-        <p key={idx} className="font-serif-reading text-[18px] md:text-[19px] leading-[1.8] text-[#111111] dark:text-[#ECECEC] mb-6">
-          {renderInlineMarkdown(block)}
-        </p>
-      );
-    });
   };
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { Post, Category, Tag, MediaItem, FAQItem } from '../../types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -83,6 +83,8 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
   const [isDirty, setIsDirty] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(true);
 
+  const deferredContent = useDeferredValue(content);
+
   // Auto slug generation if empty
   useEffect(() => {
     if (!post && title && !slug) {
@@ -93,15 +95,17 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
 
   // Autosave status tracking
   useEffect(() => {
+    if (!post && !title && !content) return;
     setIsDirty(true);
   }, [title, slug, excerpt, content, category, tags, status, isFeatured, coverImage, seoTitle, seoDescription, faqs]);
 
-  // Real-time word count & reading time
+  // Real-time word count & reading time (calculated on deferred content for 60fps typing)
   const { wordCount, readingTimeMinutes } = useMemo(() => {
-    const words = content.trim().split(/\s+/).filter((w) => w.length > 0).length;
+    const match = deferredContent.match(/\S+/g);
+    const words = match ? match.length : 0;
     const time = Math.max(1, Math.ceil(words / 200));
     return { wordCount: words, readingTimeMinutes: time };
-  }, [content]);
+  }, [deferredContent]);
 
   // Formatting helpers for Markdown toolbar
   const insertFormatting = (prefix: string, suffix: string = '') => {
@@ -440,7 +444,7 @@ export const AdminPostEditorView: React.FC<AdminPostEditorViewProps> = ({
                   )}
 
                   <MarkdownContent
-                    content={content}
+                    content={deferredContent}
                     isEditorPreview={true}
                   />
 

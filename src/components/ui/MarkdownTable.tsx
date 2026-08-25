@@ -6,6 +6,8 @@ export interface TableColumn {
 }
 
 export function parseMarkdownTable(block: string): { headers: TableColumn[]; rows: string[][] } | null {
+  if (!block || !block.includes('|')) return null;
+
   const lines = block
     .trim()
     .split('\n')
@@ -53,7 +55,6 @@ export function parseMarkdownTable(block: string): { headers: TableColumn[]; row
   const rows: string[][] = [];
   for (let i = 2; i < lines.length; i++) {
     const cells = extractCells(lines[i]);
-    // Pad or trim cells to match header count
     const normalizedCells: string[] = headers.map((_, colIdx) => cells[colIdx] || '');
     rows.push(normalizedCells);
   }
@@ -61,79 +62,89 @@ export function parseMarkdownTable(block: string): { headers: TableColumn[]; row
   return { headers, rows };
 }
 
+/**
+ * Ultra-fast O(N) single-pass inline markdown tokenizer.
+ * Handles bold (**text**), italic (*text* / _text_), inline code (`code`), and markdown links ([text](url))
+ * with fast-path fallback and zero catastrophic backtracking.
+ */
 export function renderInlineMarkdown(text: string): React.ReactNode {
-  // Replace bold **text** or inline code `code` or links [title](url)
-  // Split on bold, code, and links
+  if (!text) return '';
+
+  // Fast-path: If the string has none of the markdown characters, return plain string immediately
+  if (!text.includes('*') && !text.includes('`') && !text.includes('[') && !text.includes('_')) {
+    return text;
+  }
+
   const parts: React.ReactNode[] = [];
-  let remaining = text;
+  let lastIndex = 0;
   let key = 0;
 
-  while (remaining.length > 0) {
-    // Check for bold
-    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-    // Check for code
-    const codeMatch = remaining.match(/`(.+?)`/);
-    // Check for link
-    const linkMatch = remaining.match(/\[(.+?)\]\((.+?)\)/);
+  // Single non-backtracking global regex:
+  // group 1: bold **text**
+  // group 2: bold __text__
+  // group 3: inline code `code`
+  // group 4 & 5: link [label](url)
+  // group 6: italic *text*
+  // group 7: italic _text_
+  const inlineRegex = /\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|`([^`\n]+?)`|\[([^\]\n]+?)\]\(([^)\s]+)\)|\*([^*\n]+?)\*|_([^_\n]+?)_/g;
+  let match: RegExpExecArray | null;
 
-    // Find first occurrence
-    type MatchInfo = { type: 'bold' | 'code' | 'link'; index: number; length: number; match: RegExpMatchArray };
-    const matches: MatchInfo[] = [];
-
-    if (boldMatch && boldMatch.index !== undefined) {
-      matches.push({ type: 'bold', index: boldMatch.index, length: boldMatch[0].length, match: boldMatch });
-    }
-    if (codeMatch && codeMatch.index !== undefined) {
-      matches.push({ type: 'code', index: codeMatch.index, length: codeMatch[0].length, match: codeMatch });
-    }
-    if (linkMatch && linkMatch.index !== undefined) {
-      matches.push({ type: 'link', index: linkMatch.index, length: linkMatch[0].length, match: linkMatch });
+  while ((match = inlineRegex.exec(text)) !== null) {
+    // Add text preceding the match
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
     }
 
-    if (matches.length === 0) {
-      parts.push(remaining);
-      break;
-    }
-
-    matches.sort((a, b) => a.index - b.index);
-    const earliest = matches[0];
-
-    // Push preceding plain text
-    if (earliest.index > 0) {
-      parts.push(remaining.substring(0, earliest.index));
-    }
-
-    if (earliest.type === 'bold') {
+    if (match[1] !== undefined || match[2] !== undefined) {
+      // Bold: **text** or __text__
+      const boldText = match[1] ?? match[2];
       parts.push(
-        <strong key={key++} className="font-semibold text-[#111111] dark:text-white">
-          {earliest.match[1]}
+        <strong key={`b-${key++}`} className="font-semibold text-[#111111] dark:text-white">
+          {boldText}
         </strong>
       );
-    } else if (earliest.type === 'code') {
+    } else if (match[3] !== undefined) {
+      // Inline Code: `code`
       parts.push(
         <code
-          key={key++}
+          key={`c-${key++}`}
           className="px-1.5 py-0.5 rounded-[4px] bg-[#F0F0EE] dark:bg-[#2A2A28] font-mono text-[13px] text-[#1E3E62] dark:text-blue-400"
         >
-          {earliest.match[1]}
+          {match[3]}
         </code>
       );
-    } else if (earliest.type === 'link') {
+    } else if (match[4] !== undefined && match[5] !== undefined) {
+      // Link: [text](url)
       parts.push(
         <a
-          key={key++}
-          href={earliest.match[2]}
+          key={`l-${key++}`}
+          href={match[5]}
           target="_blank"
           rel="noopener noreferrer"
           className="text-[#1E3E62] dark:text-blue-400 hover:underline"
         >
-          {earliest.match[1]}
+          {match[4]}
         </a>
+      );
+    } else if (match[6] !== undefined || match[7] !== undefined) {
+      // Italic: *text* or _text_
+      const italicText = match[6] ?? match[7];
+      parts.push(
+        <em key={`i-${key++}`} className="italic">
+          {italicText}
+        </em>
       );
     }
 
-    remaining = remaining.substring(earliest.index + earliest.length);
+    lastIndex = inlineRegex.lastIndex;
   }
 
-  return parts.length === 1 ? parts[0] : <>{parts}</>;
+  // Add any remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  if (parts.length === 0) return text;
+  if (parts.length === 1) return parts[0];
+  return <>{parts}</>;
 }
