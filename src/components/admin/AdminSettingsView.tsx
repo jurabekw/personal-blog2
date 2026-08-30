@@ -26,6 +26,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   const [title, setTitle] = useState(settings.title || 'Jurabek');
   const [description, setDescription] = useState(settings.description || '');
   const [authorName, setAuthorName] = useState(settings.authorName || '');
+  const [authorSubtitle, setAuthorSubtitle] = useState(settings.authorSubtitle || '');
   const [authorBio, setAuthorBio] = useState(settings.authorBio || '');
   const [authorAvatar, setAuthorAvatar] = useState(settings.authorAvatar || '');
   const [email, setEmail] = useState(settings.email || '');
@@ -95,6 +96,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
         title,
         description,
         authorName,
+        authorSubtitle,
         authorBio,
         authorAvatar,
         email,
@@ -172,6 +174,13 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
             <Input label="Publication Title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <Input label="Author Name" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
           </div>
+
+          <Input
+            label="Author Subtitle / Profession"
+            placeholder="e.g., Marketing mutaxassisi / Dasturchi"
+            value={authorSubtitle}
+            onChange={(e) => setAuthorSubtitle(e.target.value)}
+          />
 
           <Textarea
             label="Site Subtitle / Description"

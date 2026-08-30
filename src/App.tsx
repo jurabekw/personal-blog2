@@ -76,9 +76,10 @@ export function JurabekApp() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [settings, setSettings] = useState<SiteSettings>({
     title: 'Jurabek',
-    description: 'A quiet personal journal on typography, software craftsmanship, and quiet digital interfaces.',
+    description: 'Dizayn, dasturiy ta\'minot san\'ati va sokin raqamli interfeyslar haqida shaxsiy jurnal.',
     authorName: 'Jurabek',
-    authorBio: 'Software architect and essayist exploring quiet digital tools, typography, and enduring personal software.',
+    authorSubtitle: 'Marketing mutaxassisi',
+    authorBio: 'Ora-orada marketing, Sun\'iy Intellekt va vebsaytlar haqida post yozib turaman',
     authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
     email: 'shokirovj35@gmail.com',
     postsPerPage: 10,

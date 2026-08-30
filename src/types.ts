@@ -73,6 +73,7 @@ export interface SiteSettings {
   title: string;
   description: string;
   authorName: string;
+  authorSubtitle?: string;
   authorBio: string;
   authorAvatar: string;
   email: string;

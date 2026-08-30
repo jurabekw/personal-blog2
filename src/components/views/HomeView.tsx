@@ -43,7 +43,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {settings.authorName}
             </h1>
             <p className="text-[15px] text-[#666666] dark:text-[#999999]">
-              {t.authorSubtitle}
+              {settings.authorSubtitle || t.authorSubtitle}
             </p>
           </div>
         </div>
