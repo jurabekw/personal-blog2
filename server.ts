@@ -6,12 +6,14 @@ import { createExpressApp, escapeXml } from './api/index';
 import { loadLocalDb, getSqlClient, initNeonTables, mapRowToPost } from './api/db';
 import { Post, SiteSettings } from './src/types';
 
-async function getPostAndSettings(slug: string): Promise<{ post: Post | null; settings: SiteSettings }> {
+async function getPostAndSettings(rawSlug: string): Promise<{ post: Post | null; settings: SiteSettings }> {
+  const cleanSlug = rawSlug ? decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, '').trim()) : '';
+
   try {
     const sql = getSqlClient();
-    if (sql) {
+    if (sql && cleanSlug) {
       await initNeonTables();
-      const rows = await sql`SELECT * FROM posts WHERE slug = ${slug} OR id = ${slug} LIMIT 1`;
+      const rows = await sql`SELECT * FROM posts WHERE LOWER(slug) = LOWER(${cleanSlug}) OR id = ${cleanSlug} LIMIT 1`;
       const post = rows && rows.length > 0 ? mapRowToPost(rows[0]) : null;
       const settingsRows = await sql`SELECT value FROM site_settings WHERE key = 'main' LIMIT 1`;
       const settings = settingsRows && settingsRows.length > 0
@@ -24,7 +26,9 @@ async function getPostAndSettings(slug: string): Promise<{ post: Post | null; se
   }
 
   const local = loadLocalDb();
-  const post = local.posts.find((p) => p.slug === slug || p.id === slug) || null;
+  const post = cleanSlug
+    ? (local.posts.find((p) => p.slug.toLowerCase() === cleanSlug.toLowerCase() || p.id === cleanSlug) || null)
+    : null;
   return { post, settings: local.settings };
 }
 

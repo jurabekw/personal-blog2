@@ -505,7 +505,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                   {t.writtenBy} {settings?.authorName || 'Jurabek'}
                 </h4>
                 <p className="text-[#666666] dark:text-[#999999] text-[13px]">
-                  {settings?.authorBio || "Dasturiy ta'minot arxitektori va insho muallifi. Sokin raqamli vositalar va tipografik vazminlik bo'yicha izlanishlar olib boradi."}
+                  {settings?.authorBio || "Ora-orada marketing, Sun'iy Intellekt va vebsaytlar haqida post yozib turaman"}
                 </p>
               </div>
             </div>

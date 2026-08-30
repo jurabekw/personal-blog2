@@ -213,13 +213,14 @@ export function createExpressApp() {
   app.get('/api/posts/:idOrSlug', async (req, res) => {
     try {
       const { idOrSlug } = req.params;
+      const cleanIdOrSlug = decodeURIComponent(String(idOrSlug).trim());
       const incrementView = req.query.incrementView === 'true';
       const sql = getSqlClient();
 
       if (sql) {
         await initNeonTables();
         const rows = await sql`
-          SELECT * FROM posts WHERE id = ${idOrSlug} OR slug = ${idOrSlug} LIMIT 1
+          SELECT * FROM posts WHERE id = ${cleanIdOrSlug} OR LOWER(slug) = LOWER(${cleanIdOrSlug}) LIMIT 1
         `;
 
         if (!rows || rows.length === 0) {
@@ -240,7 +241,7 @@ export function createExpressApp() {
 
       // Local fallback
       const db = loadLocalDb();
-      const post = db.posts.find((p) => p.id === idOrSlug || p.slug === idOrSlug);
+      const post = db.posts.find((p) => p.id === cleanIdOrSlug || p.slug.toLowerCase() === cleanIdOrSlug.toLowerCase());
       if (!post) {
         return res.status(404).json({ error: 'Post not found' });
       }

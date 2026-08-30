@@ -40,7 +40,22 @@ export function JurabekApp() {
   });
 
   // Public Navigation state
-  const [activeTab, setActiveTab] = useState<string>('home');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
+        return 'article';
+      }
+      if (path === '/blog' || path.startsWith('/blog') || hash === '#writing') {
+        return 'writing';
+      }
+      if (path === '/contact' || hash === '#contact') {
+        return 'contact';
+      }
+    }
+    return 'home';
+  });
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -138,11 +153,22 @@ export function JurabekApp() {
       } else if (userSess.isAuthenticated && localStorage.getItem('jurabek_in_admin') === 'true') {
         setIsAdminMode(true);
       } else if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
-        const slug = path.replace('/blog/', '').replace('#blog/', '');
+        const rawSlug = path.startsWith('/blog/') ? path.replace(/^\/blog\//, '') : hash.replace(/^#blog\//, '');
+        const slug = decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, ''));
         const found = fetchedPosts.find((p) => p.slug === slug || p.id === slug);
         if (found) {
           setSelectedPost(found);
           setActiveTab('article');
+        } else {
+          try {
+            const singlePost = await api.getPostBySlugOrId(slug);
+            if (singlePost) {
+              setSelectedPost(singlePost);
+              setActiveTab('article');
+            }
+          } catch (e) {
+            console.warn('Post not found:', slug);
+          }
         }
       }
     } catch (err) {
@@ -181,11 +207,19 @@ export function JurabekApp() {
           setShowAdminLogin(true);
         }
       } else if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
-        const slug = path.replace('/blog/', '').replace('#blog/', '');
+        const rawSlug = path.startsWith('/blog/') ? path.replace(/^\/blog\//, '') : hash.replace(/^#blog\//, '');
+        const slug = decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, ''));
         const found = posts.find((p) => p.slug === slug || p.id === slug);
         if (found) {
           setSelectedPost(found);
           setActiveTab('article');
+        } else {
+          api.getPostBySlugOrId(slug).then((singlePost) => {
+            if (singlePost) {
+              setSelectedPost(singlePost);
+              setActiveTab('article');
+            }
+          }).catch(() => {});
         }
       }
     };
@@ -550,14 +584,41 @@ export function JurabekApp() {
           />
         )}
 
-        {activeTab === 'article' && selectedPost && (
-          <ArticleView
-            post={selectedPost}
-            allPosts={posts}
-            settings={settings}
-            onSelectPost={handleSelectPost}
-            onBackToWriting={() => setActiveTab('writing')}
-          />
+        {activeTab === 'article' && (
+          selectedPost ? (
+            <ArticleView
+              post={selectedPost}
+              allPosts={posts}
+              settings={settings}
+              onSelectPost={handleSelectPost}
+              onBackToWriting={() => setActiveTab('writing')}
+            />
+          ) : isLoading ? (
+            <div className="w-full max-w-[72ch] mx-auto px-6 py-24 flex flex-col items-center justify-center gap-4 text-center">
+              <div className="w-8 h-8 rounded-full border-2 border-[#1E3E62] border-t-transparent animate-spin" />
+              <p className="text-[14px] text-[#666666] dark:text-[#999999]">Maqola yuklanmoqda...</p>
+            </div>
+          ) : (
+            <div className="w-full max-w-[72ch] mx-auto px-6 py-24 flex flex-col items-center justify-center gap-4 text-center">
+              <h2 className="text-[24px] font-serif font-bold text-[#111111] dark:text-[#ECECEC]">
+                Maqola topilmadi
+              </h2>
+              <p className="text-[14px] text-[#666666] dark:text-[#999999]">
+                Siz qidirayotgan sahifa o'chirilgan yoki manzili o'zgartirilgan bo'lishi mumkin.
+              </p>
+              <button
+                onClick={() => {
+                  setActiveTab('writing');
+                  if (window.location.pathname !== '/blog') {
+                    window.history.pushState({}, '', '/blog');
+                  }
+                }}
+                className="mt-2 px-4 py-2 rounded-[8px] bg-[#1E3E62] text-white text-[13px] font-medium hover:bg-[#152C46] transition-colors"
+              >
+                Barcha maqolalarga qaytish
+              </button>
+            </div>
+          )
         )}
 
         {activeTab === 'contact' && (
