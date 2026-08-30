@@ -10,11 +10,9 @@ import {
   loadLocalDb,
   saveLocalDb,
   logActivity,
+  requireEnv,
   DbStatus
 } from './db.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'jurabek-publishing-secure-jwt-key-2026';
-const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'James1995.123';
 
 export function calculateReadingTime(text: string): { wordCount: number; readingTimeMinutes: number } {
   if (!text) return { wordCount: 0, readingTimeMinutes: 1 };
@@ -85,18 +83,19 @@ export function createExpressApp() {
         return res.status(401).json({ error: 'Unauthorized. Empty token.' });
       }
 
-      // 1. Verify stateless JWT token
+      // Verify stateless JWT token
+      let jwtSecret: string;
       try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { role: string; username: string };
-        if (decoded && decoded.role === 'admin') {
-          (req as any).user = decoded;
-          return next();
-        }
-      } catch {
-        // If JWT verify fails, check legacy token string for backwards compatibility
-        if (token.startsWith('token-')) {
-          return next();
-        }
+        jwtSecret = requireEnv('JWT_SECRET');
+      } catch (envErr: any) {
+        console.error('[requireAdmin config error]:', envErr);
+        return res.status(500).json({ error: 'Server misconfigured: JWT_SECRET is not set.' });
+      }
+
+      const decoded = jwt.verify(token, jwtSecret) as { role: string; username: string };
+      if (decoded && decoded.role === 'admin') {
+        (req as any).user = decoded;
+        return next();
       }
 
       return res.status(401).json({ error: 'Unauthorized. Invalid or expired admin session token.' });
@@ -630,16 +629,52 @@ export function createExpressApp() {
   });
 
   // DELETE /api/categories/:id (Protected)
+  // Reassigns any posts still using this category to a fallback category
+  // ('Essays' if it exists, else the alphabetically-first remaining category)
+  // before deleting it, so posts never end up pointing at a category that no
+  // longer exists.
   app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const sql = getSqlClient();
       if (sql) {
         await initNeonTables();
+        const deletingRows = await sql`SELECT name FROM categories WHERE id = ${id} LIMIT 1`;
+        if (deletingRows && deletingRows.length > 0) {
+          const deletedName = String(deletingRows[0].name);
+          const otherCategories = await sql`SELECT name FROM categories WHERE id != ${id} ORDER BY name ASC`;
+          const fallbackName =
+            otherCategories.find((c: any) => String(c.name).toLowerCase() === 'essays')?.name ||
+            otherCategories[0]?.name ||
+            null;
+          if (fallbackName) {
+            await sql`
+              UPDATE posts SET category = ${fallbackName}, updated_at = NOW()
+              WHERE LOWER(category) = LOWER(${deletedName})
+            `;
+          }
+        }
         await sql`DELETE FROM categories WHERE id = ${id}`;
         return res.json({ success: true });
       }
+
       const db = loadLocalDb();
+      const deleting = db.categories.find((c) => c.id === id);
+      if (deleting) {
+        const others = db.categories
+          .filter((c) => c.id !== id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const fallback = others.find((c) => c.name.toLowerCase() === 'essays') || others[0] || null;
+        if (fallback) {
+          const now = new Date().toISOString();
+          db.posts.forEach((p) => {
+            if (p.category.toLowerCase() === deleting.name.toLowerCase()) {
+              p.category = fallback.name;
+              p.updatedAt = now;
+            }
+          });
+        }
+      }
       db.categories = db.categories.filter((c) => c.id !== id);
       saveLocalDb(db);
       return res.json({ success: true });
@@ -908,10 +943,10 @@ export function createExpressApp() {
 
       const sql = getSqlClient();
       let isValid = false;
-      const defaultPassword = process.env.ADMIN_PASSWORD || 'James1995.123';
 
       if (sql) {
         await initNeonTables();
+        const defaultPassword = requireEnv('ADMIN_PASSWORD');
 
         // 1. Check admin_users table (bcrypt hash)
         const userRows = await sql`SELECT id, username, password_hash FROM admin_users ORDER BY created_at ASC LIMIT 1`;
@@ -955,18 +990,16 @@ export function createExpressApp() {
           }
         }
 
-        // 3. Check environment override
-        if (!isValid && process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD) {
-          isValid = true;
-        }
-
-        // 4. Default fallback match
+        // 3. Default fallback match
         if (!isValid && password === defaultPassword) {
           isValid = true;
         }
       } else {
         const db = loadLocalDb();
-        const expected = process.env.ADMIN_PASSWORD || db.adminPasswordHash || defaultPassword;
+        // Prefer a previously-set local password (from change-password) over the
+        // required env var, so rotating ADMIN_PASSWORD doesn't relock an admin
+        // who already changed their password.
+        const expected = db.adminPasswordHash || requireEnv('ADMIN_PASSWORD');
         if (expected.startsWith('$2')) {
           try {
             isValid = bcrypt.compareSync(password, expected);
@@ -974,7 +1007,7 @@ export function createExpressApp() {
             isValid = false;
           }
         }
-        if (!isValid && (password === expected || password === defaultPassword)) {
+        if (!isValid && password === expected) {
           isValid = true;
         }
       }
@@ -987,7 +1020,7 @@ export function createExpressApp() {
             username: 'Jurabek',
             loginAt: new Date().toISOString()
           },
-          JWT_SECRET,
+          requireEnv('JWT_SECRET'),
           { expiresIn: '30d' }
         );
 
@@ -1023,10 +1056,10 @@ export function createExpressApp() {
       }
 
       const sql = getSqlClient();
-      const defaultPassword = process.env.ADMIN_PASSWORD || 'James1995.123';
 
       if (sql) {
         await initNeonTables();
+        const defaultPassword = requireEnv('ADMIN_PASSWORD');
         const userRows = await sql`SELECT id, username, password_hash FROM admin_users ORDER BY created_at ASC LIMIT 1`;
         let isCurrentValid = false;
 
@@ -1051,9 +1084,18 @@ export function createExpressApp() {
         }
 
         const newHash = bcrypt.hashSync(newPassword, 10);
-        await sql`
-          UPDATE admin_users SET password_hash = ${newHash}, updated_at = NOW()
-        `;
+        if (userRows && userRows.length > 0) {
+          // Scoped to the actual admin row so this never touches other admin accounts.
+          await sql`
+            UPDATE admin_users SET password_hash = ${newHash}, updated_at = NOW() WHERE id = ${userRows[0].id}
+          `;
+        } else {
+          await sql`
+            INSERT INTO admin_users (id, username, password_hash, created_at, updated_at)
+            VALUES ('admin-default', 'Jurabek', ${newHash}, NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET password_hash = ${newHash}, updated_at = NOW()
+          `;
+        }
         await sql`
           INSERT INTO admin_config (key, value)
           VALUES ('admin_password', ${newPassword})
@@ -1065,7 +1107,7 @@ export function createExpressApp() {
 
       // Local fallback
       const db = loadLocalDb();
-      const currentExpected = db.adminPasswordHash || defaultPassword;
+      const currentExpected = db.adminPasswordHash || requireEnv('ADMIN_PASSWORD');
       if (currentPassword !== currentExpected) {
         return res.status(400).json({ error: 'Current password is incorrect' });
       }
@@ -1137,25 +1179,15 @@ export function createExpressApp() {
         return res.json({ isAuthenticated: false, user: null });
       }
 
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { role: string; username: string };
-        if (decoded && decoded.role === 'admin') {
-          return res.json({
-            isAuthenticated: true,
-            user: {
-              username: decoded.username || 'Jurabek',
-              role: 'Admin'
-            }
-          });
-        }
-      } catch {
-        // Fallback for legacy tokens
-        if (token.startsWith('token-')) {
-          return res.json({
-            isAuthenticated: true,
-            user: { username: 'Jurabek', role: 'Admin' }
-          });
-        }
+      const decoded = jwt.verify(token, requireEnv('JWT_SECRET')) as { role: string; username: string };
+      if (decoded && decoded.role === 'admin') {
+        return res.json({
+          isAuthenticated: true,
+          user: {
+            username: decoded.username || 'Jurabek',
+            role: 'Admin'
+          }
+        });
       }
 
       return res.json({ isAuthenticated: false, user: null });
@@ -1210,7 +1242,7 @@ export function createExpressApp() {
   });
 
   // GET /rss.xml or /feed
-  app.get(['/rss.xml', '/feed', '/rss'], async (req, res) => {
+  app.get(['/rss.xml', '/feed.xml', '/feed', '/rss'], async (req, res) => {
     try {
       let posts: Post[] = [];
       const sql = getSqlClient();
