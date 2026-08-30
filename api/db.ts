@@ -33,6 +33,17 @@ export function getDatabaseUrl(): string | undefined {
   return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL;
 }
 
+// Reads a required secret from the environment. Throws instead of silently
+// falling back to a guessable default so misconfigured deployments fail
+// loudly rather than shipping with a known admin password / JWT secret.
+export function requireEnv(name: string): string {
+  const val = process.env[name];
+  if (!val) {
+    throw new Error(`${name} environment variable is required but not set.`);
+  }
+  return val;
+}
+
 export function getSqlClient(): NeonQueryFunction<false, false> | null {
   const dbUrl = getDatabaseUrl();
   if (!dbUrl) {
@@ -206,13 +217,15 @@ export async function initNeonTables(): Promise<boolean> {
       );
     `;
 
-    // 2. Auto-provision default admin account if not present
-    const defaultPassword = process.env.ADMIN_PASSWORD || 'James1995.123';
+    // 2. Auto-provision default admin account if not present (requires ADMIN_PASSWORD
+    // to be configured; skipped with a warning if it isn't, rather than seeding a
+    // guessable default password).
     const existingAdmins = await sql`SELECT COUNT(*)::int as count FROM admin_users`;
     const adminCount = existingAdmins[0]?.count ?? 0;
 
     if (adminCount === 0) {
       try {
+        const defaultPassword = requireEnv('ADMIN_PASSWORD');
         const salt = bcrypt.genSaltSync(10);
         const hash = bcrypt.hashSync(defaultPassword, salt);
         await sql`
@@ -348,7 +361,11 @@ export function loadLocalDb(): LocalDatabaseSchema {
     media: initialMedia || [],
     settings: initialSettings || ({} as SiteSettings),
     activity: initialActivityLogs || [],
-    adminPasswordHash: process.env.ADMIN_PASSWORD || 'James1995.123'
+    // Left blank rather than seeded with a hardcoded default: callers that need the
+    // admin password (login, change-password) must go through requireEnv('ADMIN_PASSWORD')
+    // instead of relying on a guessable fallback stored here. loadLocalDb() itself must
+    // stay side-effect-free for secrets since it's also called on every public read.
+    adminPasswordHash: process.env.ADMIN_PASSWORD || ''
   };
   saveLocalDb(fallback);
   return fallback;
