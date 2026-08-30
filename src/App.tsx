@@ -56,7 +56,18 @@ export function JurabekApp() {
     }
     return 'home';
   });
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
+        const rawSlug = path.startsWith('/blog/') ? path.replace(/^\/blog\//, '') : hash.replace(/^#blog\//, '');
+        const slug = decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, ''));
+        return initialPosts.find((p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug) || null;
+      }
+    }
+    return null;
+  });
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Modals state
@@ -118,6 +129,109 @@ export function JurabekApp() {
     }
   }, [darkMode]);
 
+  // Centralized Navigation and URL Router
+  const navigateTo = useCallback((
+    target: 'home' | 'writing' | 'contact' | 'admin' | string,
+    options?: { replace?: boolean; post?: Post | null; category?: string | null }
+  ) => {
+    let targetPath = '/';
+    let nextTab = 'home';
+
+    if (target === 'home' || target === '/') {
+      targetPath = '/';
+      nextTab = 'home';
+      setSelectedPost(null);
+      if (options?.category !== undefined) setSelectedCategory(options.category);
+    } else if (target === 'writing' || target === '/blog') {
+      targetPath = '/blog';
+      nextTab = 'writing';
+      setSelectedPost(null);
+      if (options?.category !== undefined) setSelectedCategory(options.category);
+    } else if (target === 'contact' || target === '/contact') {
+      targetPath = '/contact';
+      nextTab = 'contact';
+      setSelectedPost(null);
+    } else if (target === 'admin' || target === '/admin') {
+      targetPath = '/admin';
+      if (session.isAuthenticated) {
+        setIsAdminMode(true);
+        setShowAdminLogin(false);
+      } else {
+        setShowAdminLogin(true);
+      }
+    } else if (target.startsWith('/blog/')) {
+      targetPath = target;
+      nextTab = 'article';
+      if (options?.post) {
+        setSelectedPost(options.post);
+      }
+    } else if (target === 'article' && options?.post) {
+      targetPath = `/blog/${options.post.slug}`;
+      nextTab = 'article';
+      setSelectedPost(options.post);
+    }
+
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname !== targetPath) {
+        if (options?.replace) {
+          window.history.replaceState({}, '', targetPath);
+        } else {
+          window.history.pushState({}, '', targetPath);
+        }
+      }
+    }
+
+    setActiveTab(nextTab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [session.isAuthenticated]);
+
+  // Synchronize state with current browser URL (for direct load, popstate, and back/forward)
+  const syncRouteFromLocation = useCallback((currentPosts: Post[] = posts, currentSession: UserSession = session) => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+
+    const isAdminUrl = path === '/admin' || path.startsWith('/admin') || hash === '#admin';
+    if (isAdminUrl) {
+      if (currentSession.isAuthenticated) {
+        setIsAdminMode(true);
+        setShowAdminLogin(false);
+      } else {
+        setShowAdminLogin(true);
+      }
+      return;
+    }
+
+    setIsAdminMode(false);
+    setShowAdminLogin(false);
+
+    if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
+      const rawSlug = path.startsWith('/blog/') ? path.replace(/^\/blog\//, '') : hash.replace(/^#blog\//, '');
+      const slug = decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, ''));
+      const found = currentPosts.find((p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug);
+      if (found) {
+        setSelectedPost(found);
+        setActiveTab('article');
+      } else {
+        setActiveTab('article');
+        api.getPostBySlugOrId(slug).then((singlePost) => {
+          if (singlePost) {
+            setSelectedPost(singlePost);
+          }
+        }).catch(() => {});
+      }
+    } else if (path === '/blog' || path.startsWith('/blog') || hash === '#writing') {
+      setSelectedPost(null);
+      setActiveTab('writing');
+    } else if (path === '/contact' || hash === '#contact') {
+      setSelectedPost(null);
+      setActiveTab('contact');
+    } else {
+      setSelectedPost(null);
+      setActiveTab('home');
+    }
+  }, [posts, session]);
+
   // Load initial backend data
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -139,38 +253,7 @@ export function JurabekApp() {
       const userSess = await api.checkSession();
       setSession(userSess);
 
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      const isAdminUrl = path === '/admin' || path.startsWith('/admin') || hash === '#admin';
-
-      if (isAdminUrl) {
-        if (userSess.isAuthenticated) {
-          setIsAdminMode(true);
-          setShowAdminLogin(false);
-        } else {
-          setShowAdminLogin(true);
-        }
-      } else if (userSess.isAuthenticated && localStorage.getItem('jurabek_in_admin') === 'true') {
-        setIsAdminMode(true);
-      } else if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
-        const rawSlug = path.startsWith('/blog/') ? path.replace(/^\/blog\//, '') : hash.replace(/^#blog\//, '');
-        const slug = decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, ''));
-        const found = fetchedPosts.find((p) => p.slug === slug || p.id === slug);
-        if (found) {
-          setSelectedPost(found);
-          setActiveTab('article');
-        } else {
-          try {
-            const singlePost = await api.getPostBySlugOrId(slug);
-            if (singlePost) {
-              setSelectedPost(singlePost);
-              setActiveTab('article');
-            }
-          } catch (e) {
-            console.warn('Post not found:', slug);
-          }
-        }
-      }
+      syncRouteFromLocation(fetchedPosts, userSess);
     } catch (err) {
       console.warn('Backend API unavailable, loading offline seed data:', err);
       setPosts(initialPosts);
@@ -179,58 +262,29 @@ export function JurabekApp() {
       setMediaItems(initialMedia);
       setSettings(initialSettings);
 
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      if (path === '/admin' || path.startsWith('/admin') || hash === '#admin') {
-        setShowAdminLogin(true);
-      }
+      syncRouteFromLocation(initialPosts, { isAuthenticated: false, user: null });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [syncRouteFromLocation]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Handle URL changes for /admin and /blog/ routes
+  // Handle browser back/forward buttons (popstate & hashchange)
   useEffect(() => {
-    const handleLocationCheck = () => {
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      const isAdminUrl = path === '/admin' || path.startsWith('/admin') || hash === '#admin';
-      if (isAdminUrl) {
-        if (session.isAuthenticated) {
-          setIsAdminMode(true);
-          setShowAdminLogin(false);
-        } else {
-          setShowAdminLogin(true);
-        }
-      } else if (path.startsWith('/blog/') || hash.startsWith('#blog/')) {
-        const rawSlug = path.startsWith('/blog/') ? path.replace(/^\/blog\//, '') : hash.replace(/^#blog\//, '');
-        const slug = decodeURIComponent(rawSlug.split('?')[0].split('#')[0].replace(/\/+$/, ''));
-        const found = posts.find((p) => p.slug === slug || p.id === slug);
-        if (found) {
-          setSelectedPost(found);
-          setActiveTab('article');
-        } else {
-          api.getPostBySlugOrId(slug).then((singlePost) => {
-            if (singlePost) {
-              setSelectedPost(singlePost);
-              setActiveTab('article');
-            }
-          }).catch(() => {});
-        }
-      }
+    const handleLocationChange = () => {
+      syncRouteFromLocation(posts, session);
     };
 
-    window.addEventListener('popstate', handleLocationCheck);
-    window.addEventListener('hashchange', handleLocationCheck);
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
     return () => {
-      window.removeEventListener('popstate', handleLocationCheck);
-      window.removeEventListener('hashchange', handleLocationCheck);
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
     };
-  }, [session.isAuthenticated, posts]);
+  }, [syncRouteFromLocation, posts, session]);
 
   // Load activity logs when admin mode opens
   const refreshActivityLogs = useCallback(async () => {
@@ -252,12 +306,7 @@ export function JurabekApp() {
 
   // Public Handlers
   const handleSelectPost = async (post: Post) => {
-    setSelectedPost(post);
-    setActiveTab('article');
-    if (window.location.pathname !== `/blog/${post.slug}`) {
-      window.history.pushState({}, '', `/blog/${post.slug}`);
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo(`/blog/${post.slug}`, { post });
     try {
       await api.getPostBySlugOrId(post.id, true);
     } catch (e) {
@@ -266,9 +315,7 @@ export function JurabekApp() {
   };
 
   const handleSelectCategory = (catName: string | null) => {
-    setSelectedCategory(catName);
-    setActiveTab('writing');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('writing', { category: catName });
   };
 
   // Admin Auth Handlers
@@ -549,10 +596,7 @@ export function JurabekApp() {
 
       <Header
         activeTab={activeTab}
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        setActiveTab={(tab) => navigateTo(tab)}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         siteTitle={settings.title}
@@ -566,11 +610,7 @@ export function JurabekApp() {
             settings={settings}
             onSelectPost={handleSelectPost}
             onSelectCategory={handleSelectCategory}
-            onViewAllPosts={() => {
-              setSelectedCategory(null);
-              setActiveTab('writing');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onViewAllPosts={() => navigateTo('writing', { category: null })}
           />
         )}
 
@@ -591,7 +631,7 @@ export function JurabekApp() {
               allPosts={posts}
               settings={settings}
               onSelectPost={handleSelectPost}
-              onBackToWriting={() => setActiveTab('writing')}
+              onBackToWriting={() => navigateTo('writing')}
             />
           ) : isLoading ? (
             <div className="w-full max-w-[72ch] mx-auto px-6 py-24 flex flex-col items-center justify-center gap-4 text-center">
@@ -607,12 +647,7 @@ export function JurabekApp() {
                 Siz qidirayotgan sahifa o'chirilgan yoki manzili o'zgartirilgan bo'lishi mumkin.
               </p>
               <button
-                onClick={() => {
-                  setActiveTab('writing');
-                  if (window.location.pathname !== '/blog') {
-                    window.history.pushState({}, '', '/blog');
-                  }
-                }}
+                onClick={() => navigateTo('writing')}
                 className="mt-2 px-4 py-2 rounded-[8px] bg-[#1E3E62] text-white text-[13px] font-medium hover:bg-[#152C46] transition-colors"
               >
                 Barcha maqolalarga qaytish
@@ -631,10 +666,7 @@ export function JurabekApp() {
       <Footer
         siteTitle={settings.title}
         authorName={settings.authorName}
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        setActiveTab={(tab) => navigateTo(tab)}
       />
 
       {/* Global Modals */}

@@ -29,9 +29,11 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-6">
           <button
             onClick={() => setActiveTab('home')}
-            className="flex items-center gap-2.5 text-left group focus:outline-none"
+            className="flex items-center gap-2 text-left group focus:outline-none"
+            aria-label="Bosh sahifa"
           >
-            <span className="font-serif text-[20px] font-semibold tracking-tight text-[#111111] dark:text-[#ECECEC] group-hover:text-[#1E3E62] dark:group-hover:text-blue-400 transition-colors">
+            <span className="w-2 h-2 rounded-full bg-[#1E3E62] dark:bg-blue-400 group-hover:scale-125 transition-transform" />
+            <span className="font-serif text-[19px] font-semibold tracking-tight text-[#111111] dark:text-[#ECECEC] group-hover:text-[#1E3E62] dark:group-hover:text-blue-400 transition-colors">
               {siteTitle || 'Jurabek'}
             </span>
           </button>
