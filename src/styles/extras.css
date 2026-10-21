@@ -1,0 +1,76 @@
+/* ==========================================================================
+   Additions for the Next.js version (not in the WordPress theme)
+   ========================================================================== */
+
+/* Related posts grid (the theme referenced .jb-grid--3 without defining it). */
+@media (min-width: 768px) {
+  .jb-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .jb-grid--3 .jb-card__body { padding: var(--jb-space-lg); }
+  .jb-grid--3 .jb-card__title { font-size: 15.3px; line-height: 20.4px; }
+}
+
+/* next/image fills its wrapper exactly like the theme's <img>. */
+.jb-card__media, .jb-article__media { position: relative; }
+.jb-article__media img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Current menu item (WordPress adds .current-menu-item). */
+.jb-nav a[aria-current="page"] { color: var(--jb-ink); }
+
+/* Empty thumbnail placeholder in "So'nggi postlar". */
+.jb-recent-list__thumb--empty { display: block; }
+
+/* Scrollable tables and responsive embeds inside posts. */
+.jb-table-wrap { overflow-x: auto; margin: 0 0 var(--jb-space-xl); -webkit-overflow-scrolling: touch; }
+.jb-table-wrap table { margin: 0; min-width: 480px; }
+.jb-content th { background: var(--jb-surface); color: var(--jb-ink); font-weight: 600; }
+.jb-embed { position: relative; aspect-ratio: 16 / 9; margin: 0 0 var(--jb-space-xl); border-radius: var(--jb-radius-xl); overflow: hidden; background: var(--jb-surface-blue); }
+.jb-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.jb-content figure { margin: 0 0 var(--jb-space-xl); }
+.jb-content figcaption { margin-top: var(--jb-space-sm); font-size: 11.9px; color: var(--jb-ink-soft); text-align: center; }
+.jb-content img { margin: 0 auto var(--jb-space-xl); }
+.jb-content figure img { margin-bottom: 0; }
+.jb-content pre {
+  background: var(--jb-surface); border: 1px solid var(--jb-hairline); border-radius: var(--jb-radius-md);
+  padding: var(--jb-space-lg); font-size: 13.6px; line-height: 1.6; margin: 0 0 var(--jb-space-xl);
+}
+.jb-content code { font-size: .92em; background: var(--jb-surface); border-radius: 4px; padding: 1px 5px; }
+.jb-content pre code { background: none; padding: 0; }
+.jb-content hr { border: 0; border-top: 1px solid var(--jb-hairline); margin: var(--jb-space-3xl) 0; }
+.jb-content a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.jb-content .jb-toc { margin: 0 0 var(--jb-space-2xl); }
+.jb-content .jb-toc a { text-decoration: none; }
+.jb-content .jb-toc__list { list-style: none; padding-left: 0; }
+.jb-content .jb-toc__item { margin: 0; }
+.jb-copy-button.is-copied { background: var(--jb-green); border-color: var(--jb-green); color: #fff; }
+
+/* FAQ block (emits FAQPage structured data). */
+.jb-faq { margin-top: var(--jb-space-3xl); }
+.jb-faq__title { font-size: 20.4px; line-height: 27.2px; margin-bottom: var(--jb-space-lg); }
+.jb-faq__item { border: 1px solid var(--jb-hairline); border-radius: var(--jb-radius-xl); background: var(--jb-panel); }
+.jb-faq__item + .jb-faq__item { margin-top: var(--jb-space-msm); }
+.jb-faq__item summary {
+  cursor: pointer; list-style: none; padding: var(--jb-space-lg) var(--jb-space-xl);
+  font-family: var(--jb-font-display); font-weight: 600; font-size: 15.3px; line-height: 20.4px; color: var(--jb-ink);
+  display: flex; justify-content: space-between; gap: var(--jb-space-lg);
+}
+.jb-faq__item summary::-webkit-details-marker { display: none; }
+.jb-faq__item summary::after { content: "+"; color: var(--jb-green); font-size: 20px; line-height: 1; }
+.jb-faq__item[open] summary::after { content: "–"; }
+.jb-faq__answer { padding: 0 var(--jb-space-xl) var(--jb-space-lg); color: var(--jb-ink-mid); font-size: 15.3px; line-height: 1.7; }
+.jb-faq__answer p:last-child { margin-bottom: 0; }
+
+/* Search form button. */
+.jb-search-form button { flex-shrink: 0; }
+
+/* Page loading fallback when the database is not connected yet. */
+.jb-setup { max-width: 640px; margin: 0 auto; }
+.jb-setup code { background: var(--jb-surface); padding: 1px 5px; border-radius: 4px; }
+
+/* Avoid a flash of the light toggle state before hydration. */
+html[data-theme="dark"] .jb-theme-toggle__thumb { transform: translateX(36px); }
+html[data-theme="dark"] .jb-theme-toggle .jb-theme-toggle__icon--moon { fill: var(--jb-green) !important; opacity: 1 !important; }
+html[data-theme="dark"] .jb-theme-toggle .jb-theme-toggle__icon--sun { stroke: var(--jb-toggle-icon) !important; fill: none !important; opacity: .72 !important; }
+
+/* Only a "next" link: keep it in the right-hand column like WordPress. */
+@media (min-width: 640px) { .jb-post-nav .nav-next:only-child { grid-column: 2; } }
+.jb-post-nav .nav-previous, .jb-post-nav .nav-next { min-width: 0; }

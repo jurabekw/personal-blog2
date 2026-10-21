@@ -1,0 +1,1 @@
+ALTER TABLE "revisions" ADD COLUMN "kind" text DEFAULT 'revision' NOT NULL;
