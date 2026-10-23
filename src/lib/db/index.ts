@@ -25,7 +25,7 @@ function createClient(): postgres.Sql {
     max: process.env.VERCEL ? 5 : 10,
     idle_timeout: 20,
     connect_timeout: 15,
-    ssl: local || /sslmode=disable/.test(url) ? false : url.includes('sslmode=') ? undefined : 'require',
+    ssl: local || /sslmode=disable/.test(url) ? false : 'require',
     onnotice: () => {},
   })
 }

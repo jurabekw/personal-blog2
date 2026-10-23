@@ -33,7 +33,7 @@ const local = /@(localhost|127\.0\.0\.1)(:|\/)/.test(url) || url.includes('host=
 const sql = postgres(url, {
   prepare: false,
   max: 1,
-  ssl: local || /sslmode=disable/.test(url) ? false : url.includes('sslmode=') ? undefined : 'require',
+  ssl: local || /sslmode=disable/.test(url) ? false : 'require',
   onnotice: () => {},
 })
 
