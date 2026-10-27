@@ -296,7 +296,7 @@ export const DEFAULT_SETTINGS: AllSettings = {
       enabled: true,
       intro: '',
     },
-    analytics: { ga4: '', gtm: '', yandexMetrica: '', headCode: '', bodyCode: '' },
+    analytics: { ga4: 'G-1R44SWT5LN', gtm: '', yandexMetrica: '', headCode: '', bodyCode: '' },
     analysisLanguage: 'uz',
   },
 }
