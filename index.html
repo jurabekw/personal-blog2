@@ -10,6 +10,21 @@
 
       gtag('config', 'G-1R44SWT5LN');
     </script>
+    <!-- Yandex.Metrika counter -->
+    <script type="text/javascript">
+      (function(m,e,t,r,i,k,a){
+        m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+        m[i].l=1*new Date();
+        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+      })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=113581623', 'ym');
+
+      // Admin panelni statistikaga qo'shmaymiz
+      if (location.pathname.indexOf('/admin') !== 0) {
+        ym(113581623, 'init', {ssr:true, webvisor:true, clickmap:true, referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+      }
+    </script>
+    <!-- /Yandex.Metrika counter -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jurabek — Personal Writing & Publishing Platform</title>
@@ -62,6 +77,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
   </head>
   <body class="bg-[#FAFAF8] dark:bg-[#121211] text-[#111111] dark:text-[#ECECEC] antialiased selection:bg-[#1E3E62] selection:text-white transition-colors duration-200">
+    <noscript><div><img src="https://mc.yandex.ru/watch/113581623" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
