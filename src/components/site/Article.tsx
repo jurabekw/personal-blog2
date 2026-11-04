@@ -89,7 +89,7 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
               <article id={`post-${post.id}`} className="jb-article">
                 {post.image ? (
                   <div className="jb-article__media">
-                    <FillImage image={post.image} alt="" priority sizes="(min-width: 1180px) 820px, (min-width: 1024px) 70vw, 100vw" />
+                    <FillImage image={post.image} priority sizes="(min-width: 1180px) 820px, (min-width: 1024px) 70vw, 100vw" />
                   </div>
                 ) : null}
 
@@ -226,7 +226,7 @@ export function SinglePage({ post, html, settings, graph }: PageProps) {
         <article id={`post-${post.id}`} className="jb-article">
           {post.image ? (
             <div className="jb-article__media">
-              <FillImage image={post.image} alt="" priority sizes="(min-width: 1180px) 1140px, 100vw" />
+              <FillImage image={post.image} priority sizes="(min-width: 1180px) 1140px, 100vw" />
             </div>
           ) : null}
           <div className="jb-article__body">
