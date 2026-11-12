@@ -1,3 +1,6 @@
+import { DEFAULT_TRANSLIT_CONFIG, transliterateText } from '@/lib/translit'
+import type { Script, TranslitConfig } from '@/lib/translit'
+
 const UZ_MONTHS = [
   'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
   'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr',
@@ -10,7 +13,18 @@ function parts(date: Date, timeZone: string) {
 }
 
 /** Date as shown in the theme ("Oktabr 2, 2026" for Uzbek). */
-export function formatDate(date: Date | string, language = 'uz', timeZone = 'Asia/Tashkent'): string {
+export function formatDate(
+  date: Date | string,
+  language = 'uz',
+  timeZone = 'Asia/Tashkent',
+  script?: Script,
+  cfg: TranslitConfig = DEFAULT_TRANSLIT_CONFIG,
+): string {
+  const text = formatDateLatin(date, language, timeZone)
+  return script && script !== 'latn' && text ? transliterateText(text, script, cfg) : text
+}
+
+function formatDateLatin(date: Date | string, language: string, timeZone: string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   if (Number.isNaN(d.getTime())) return ''
   if (language === 'uz') {
