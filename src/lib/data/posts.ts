@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { and, asc, desc, eq, gt, ilike, inArray, lt, lte, ne, notInArray, or, sql, type SQL } from 'drizzle-orm'
 import { getDb, isDatabaseConfigured, schema } from '@/lib/db'
 import { excerptFromHtml, readingMinutes } from '@/lib/content/text'
+import { searchLikePattern } from './search-pattern'
 import type { FaqItem, PostSeo, TermSeo } from '@/lib/types'
 
 const { posts, terms, postTerms, media } = schema
@@ -257,7 +258,7 @@ export async function listPublishedPosts(opts: ListOptions): Promise<{ items: Po
     )
   }
   if (opts.search?.trim()) {
-    const q = `%${opts.search.trim().replace(/[%_]/g, '\\$&')}%`
+    const q = searchLikePattern(opts.search)
     conds.push(or(ilike(posts.title, q), ilike(posts.content, q), ilike(posts.excerpt, q))!)
   }
   if (opts.excludeIds?.length) conds.push(notInArray(posts.id, opts.excludeIds))

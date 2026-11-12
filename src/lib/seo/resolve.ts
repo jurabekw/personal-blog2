@@ -66,6 +66,42 @@ export function pageUrl(siteUrl: string, script: Script, path: string, page?: nu
   return `${siteUrl}${withScript(script, pagedPath(path, page))}`
 }
 
+/**
+ * hreflang alternates of a (paged) page: uz-Latn and x-default → root URL, uz-Cyrl → /kirill/ URL.
+ * Shared by the page <head> and the sitemaps so the two cannot drift.
+ */
+export function hreflangLanguages(siteUrl: string, path: string, page?: number): Record<string, string> {
+  const latnUrl = pageUrl(siteUrl, 'latn', path, page)
+  return { 'uz-Latn': latnUrl, 'uz-Cyrl': pageUrl(siteUrl, 'cyrl', path, page), 'x-default': latnUrl }
+}
+
+/**
+ * Comparison key for a canonical URL: relative URLs resolve against siteUrl, scheme and host are
+ * lower-cased, query and hash are dropped and the path gets a trailing slash. http/https and
+ * with/without "www." count as the same site only when the bare host (and port) is the site's.
+ */
+function canonicalKey(url: string, siteUrl: string): string {
+  const site = new URL(siteUrl)
+  let u: URL
+  try {
+    u = new URL(url.trim(), site.origin + '/')
+  } catch {
+    return url.trim()
+  }
+  const bare = (h: string) => h.toLowerCase().replace(/^www\./, '')
+  const web = u.protocol === 'http:' || u.protocol === 'https:'
+  const sameSite = web && bare(u.hostname) === bare(site.hostname) && u.port === site.port
+  const origin = sameSite ? `site://${bare(site.hostname)}` : `${u.protocol}//${u.host.toLowerCase()}`
+  const path = u.pathname.endsWith('/') ? u.pathname : `${u.pathname}/`
+  return origin + path
+}
+
+/** True when `canonical` points somewhere other than `self` (both normalized, see canonicalKey). */
+export function isCustomCanonical(canonical: string | undefined | null, self: string, siteUrl: string): boolean {
+  if (!canonical?.trim()) return false
+  return canonicalKey(abs(siteUrl, canonical.trim()), siteUrl) !== canonicalKey(self, siteUrl)
+}
+
 export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: string): ResolvedSeo {
   const script: Script = input.script ?? 'latn'
   const s = settings.seo
@@ -172,7 +208,7 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
 
   // A custom canonical that points somewhere other than this page: Latin keeps it as before;
   // the generated alphabet versions are noindex, follow with their own canonical (spec §5.2).
-  const customCanonical = !!canonical && canonical !== selfLatin
+  const customCanonical = !!canonical && isCustomCanonical(canonical, selfLatin, siteUrl)
   if (script !== 'latn') {
     if (canonical) canonical = url
     if (customCanonical) index = false
@@ -187,8 +223,7 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
   // hreflang pairs only on indexable, self-canonical Latin and Cyrillic pages; New Latin is never listed.
   let languages: Record<string, string> | undefined
   if (script !== 'yangi' && canonical && index && !customCanonical) {
-    const latnUrl = pageUrl(siteUrl, 'latn', input.path, input.page)
-    languages = { 'uz-Latn': latnUrl, 'uz-Cyrl': pageUrl(siteUrl, 'cyrl', input.path, input.page), 'x-default': latnUrl }
+    languages = hreflangLanguages(siteUrl, input.path, input.page)
   }
 
   const title = replaceVars(titleTpl, ctx) || g.siteName
@@ -201,6 +236,8 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
     const label = input.kind === 'post' ? input.post!.category?.name || '' : ''
     const q = new URLSearchParams({ title: input.kind === 'home' ? g.siteName : stripSite(title, g.siteName, s.separator) })
     if (label) q.set('label', label)
+    // Variants: /og transliterates the (Latin) title and label and loads the Cyrillic fonts.
+    if (script !== 'latn') q.set('script', script)
     image = { url: `${siteUrl}/og/?${q.toString()}`, width: 1200, height: 630, alt: title }
   }
 
@@ -227,7 +264,7 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
   if (script === 'latn') return latin
 
   // Templates are resolved in Latin first, then the output is transliterated (separators and
-  // numbers pass through). The /og image URL keeps the Latin title (its fonts are Latin-only).
+  // numbers pass through). The /og image URL keeps the Latin title plus script=…; /og transliterates it.
   const cfg = getTranslitConfig(settings.alphabets)
   const tx = (v: string) => (v ? transliterateText(v, script, cfg) : v)
   return {

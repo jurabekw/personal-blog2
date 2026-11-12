@@ -187,3 +187,46 @@ test('feed alternate points at the alphabet feed', () => {
   assert.equal(types('cyrl'), '/kirill/feed/')
   assert.equal(types('yangi'), '/yangi/feed/')
 })
+
+test('custom-canonical detection normalizes the URL (slash, query, hash, scheme, relative)', () => {
+  for (const canonical of [
+    `${SITE}/marketing-nima`,
+    `${SITE}/marketing-nima/?utm_source=x`,
+    `${SITE}/marketing-nima/#top`,
+    'http://www.jurabek.blog/marketing-nima/',
+    'https://jurabek.blog/marketing-nima/',
+    'HTTPS://WWW.Jurabek.Blog/marketing-nima/',
+    '/marketing-nima/',
+    'marketing-nima',
+  ]) {
+    const p = post({ seo: { canonical } })
+    const v = meta({ kind: 'post', path: '/marketing-nima/', post: p, script: 'cyrl' })
+    assert.equal((v.m.robots as { index?: boolean }).index, true, canonical)
+    assert.deepEqual(v.m.alternates?.languages, LANGS('/marketing-nima/'), canonical)
+  }
+  for (const canonical of ['https://example.com/x/', 'https://example.com/marketing-nima/', `${SITE}/boshqa/`, 'https://www.jurabek.blog.evil.com/marketing-nima/']) {
+    const v = meta({ kind: 'post', path: '/marketing-nima/', post: post({ seo: { canonical } }), script: 'cyrl' })
+    assert.equal((v.m.robots as { index?: boolean }).index, false, canonical)
+    assert.equal(v.m.alternates?.languages, undefined, canonical)
+  }
+})
+
+test('the Latin canonical tag itself is unchanged by the normalized comparison', () => {
+  for (const canonical of [`${SITE}/marketing-nima`, `${SITE}/marketing-nima/?utm_source=x`, 'http://www.jurabek.blog/marketing-nima/', 'https://example.com/x/']) {
+    const latn = meta({ kind: 'post', path: '/marketing-nima/', post: post({ seo: { canonical } }), script: 'latn' })
+    assert.equal(latn.m.alternates?.canonical, canonical)
+  }
+})
+
+test('og:image: variants pass the alphabet to /og, Latin URLs are unchanged', () => {
+  const latn = resolveSeo({ kind: 'post', path: '/marketing-nima/', post: post(), script: 'latn' }, settings(), SITE)
+  assert.equal(latn.ogImage.url, `${SITE}/og/?title=Marketing+nima&label=Marketing`)
+  const cy = resolveSeo({ kind: 'post', path: '/marketing-nima/', post: post(), script: 'cyrl' }, settings(), SITE)
+  assert.equal(cy.ogImage.url, `${SITE}/og/?title=Marketing+nima&label=Marketing&script=cyrl`)
+  assert.equal(cy.twitterImage, cy.ogImage.url)
+  const ya = resolveSeo({ kind: 'home', path: '/', script: 'yangi' }, settings(), SITE)
+  assert.equal(ya.ogImage.url, `${SITE}/og/?title=Jurabek+Blog&script=yangi`)
+  // Uploaded images are not touched.
+  const img = resolveSeo({ kind: 'post', path: '/marketing-nima/', post: post({ seo: { ogImage: '/uploads/a.png' } }), script: 'cyrl' }, settings(), SITE)
+  assert.equal(img.ogImage.url, `${SITE}/uploads/a.png`)
+})
