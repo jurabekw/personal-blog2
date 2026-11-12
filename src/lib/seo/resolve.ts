@@ -2,6 +2,7 @@ import 'server-only'
 import type { Metadata } from 'next'
 import type { AllSettings } from '@/lib/settings-defaults'
 import type { PostFull, TermRef } from '@/lib/data/posts'
+import type { Script } from '@/lib/script'
 import { formatDate } from '@/lib/format'
 import { truncate } from '@/lib/content/text'
 import { replaceVars, type TemplateContext } from './templates'
@@ -17,6 +18,8 @@ export interface SeoInput {
   post?: PostFull
   term?: TermRef
   search?: string
+  /** Alphabet of the page being described (not used by resolution yet; per-alphabet SEO is separate work). */
+  script?: Script
 }
 
 export interface ResolvedSeo {

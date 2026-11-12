@@ -5,6 +5,9 @@ import { findRedirect } from '@/lib/data/redirects'
 import { getSettings } from '@/lib/data/settings'
 import { metadataFor, seoFor } from '@/lib/seo/page'
 import { buildGraph } from '@/lib/seo/schema'
+import { getTranslitConfig } from '@/lib/translit'
+import type { Script } from '@/lib/script'
+import { localizer, scriptHref } from '@/lib/alphabet'
 import { t } from '@/lib/i18n'
 import { Breadcrumb, JsonLd, NoResults, Pagination, PostRow, type Crumb } from './parts'
 import { Sidebar } from './Sidebar'
@@ -53,42 +56,49 @@ async function totals(term: TermRef, perPage: number) {
   return { ids, pages: Math.max(1, Math.ceil(total / perPage)) }
 }
 
-export async function termMetadata(taxonomy: Taxonomy, segments: string[]): Promise<Metadata> {
+export async function termMetadata(taxonomy: Taxonomy, segments: string[], script: Script): Promise<Metadata> {
   const { term, page } = await parse(taxonomy, segments)
   if (!term) return { robots: { index: false } }
   const settings = await getSettings()
   const { pages } = await totals(term, Math.max(1, settings.reading.postsPerPage))
-  return metadataFor({ kind: taxonomy, path: term.path, term, page, pageTotal: pages })
+  return metadataFor({ kind: taxonomy, path: term.path, term, page, pageTotal: pages, script })
 }
 
 /** archive.php */
-export async function TermArchive({ taxonomy, segments }: { taxonomy: Taxonomy; segments: string[] }) {
-  const { term, page, requested, feed } = await parse(taxonomy, segments)
-  if (!term) {
+export async function TermArchive({ taxonomy, segments, script }: { taxonomy: Taxonomy; segments: string[]; script: Script }) {
+  const { term: source, page, requested, feed } = await parse(taxonomy, segments)
+  if (!source) {
     const match = await findRedirect(requested)
     if (match && match.target && match.statusCode !== 410) {
-      if (match.statusCode === 301 || match.statusCode === 308) permanentRedirect(match.target)
-      redirect(match.target)
+      const target = scriptHref(script, match.target)
+      if (match.statusCode === 301 || match.statusCode === 308) permanentRedirect(target)
+      redirect(target)
     }
     notFound()
   }
-  if (feed) permanentRedirect(term.path)
+  const inTree = (href: string) => scriptHref(script, href)
+  if (feed) permanentRedirect(inTree(source.path))
   // WordPress accepts /category/child/ — send it to the canonical /category/parent/child/.
-  if (requested !== term.path) permanentRedirect(page > 1 ? `${term.path}page/${page}/` : term.path)
-  if (page === 1 && segments.includes('page')) permanentRedirect(term.path)
+  if (requested !== source.path) permanentRedirect(inTree(page > 1 ? `${source.path}page/${page}/` : source.path))
+  if (page === 1 && segments.includes('page')) permanentRedirect(inTree(source.path))
 
-  const settings = await getSettings()
-  const perPage = Math.max(1, settings.reading.postsPerPage)
-  const { ids, pages } = await totals(term, perPage)
+  const rawSettings = await getSettings()
+  const perPage = Math.max(1, rawSettings.reading.postsPerPage)
+  const { ids, pages } = await totals(source, perPage)
   if (page > pages) notFound()
 
-  const { items, total } = await listPublishedPosts({
+  const list = await listPublishedPosts({
     page,
     perPage,
     categoryIds: taxonomy === 'category' ? ids : undefined,
-    tagId: taxonomy === 'tag' ? term.id : undefined,
+    tagId: taxonomy === 'tag' ? source.id : undefined,
   })
-  const { siteUrl, resolved, url } = await seoFor({ kind: taxonomy, path: term.path, term, page, pageTotal: pages })
+  const { siteUrl, resolved, url } = await seoFor({ kind: taxonomy, path: source.path, term: source, page, pageTotal: pages, script })
+  const L = localizer(script, getTranslitConfig(rawSettings.alphabets), siteUrl)
+  const settings = L.settings(rawSettings)
+  const term = L.term(source)
+  const items = L.posts(list.items)
+  const { total } = list
   const { general, seo, appearance } = settings
 
   const crumbs: Crumb[] = [{ label: seo.breadcrumbs.homeLabel, href: '/' }]
@@ -102,7 +112,7 @@ export async function TermArchive({ taxonomy, segments }: { taxonomy: Taxonomy; 
       parents.unshift(cur)
       cur = cur.parentId ? tax.byId.get(cur.parentId) : undefined
     }
-    for (const p of parents) graphCrumbs.push({ label: p.name, href: p.path })
+    for (const p of L.terms(parents)) graphCrumbs.push({ label: p.name, href: p.path })
   }
   crumbs.push({ label: term.name })
   graphCrumbs.push({ label: term.seo.breadcrumbTitle || term.name })
