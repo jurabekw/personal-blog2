@@ -95,6 +95,7 @@ const NAV: (NavItem | 'sep')[] = [
     sub: [
       { href: '/admin/settings/', label: 'General', exact: true },
       { href: '/admin/settings/?tab=reading', label: 'Reading' },
+      { href: '/admin/settings/?tab=alphabets', label: 'Alifbolar' },
     ],
   },
   { href: '/admin/import/', label: 'Import', icon: Import, cap: 'admin' },

@@ -6,6 +6,7 @@ import { sanitizeContent, sanitizePlain } from '@/lib/content/sanitize'
 import { revalidateSite } from '@/lib/revalidate'
 import { DEFAULT_SETTINGS, type AllSettings, type SettingsKey } from '@/lib/settings-defaults'
 import type { ActionResult } from '@/lib/admin-types'
+import { parseAlphabetSettings } from '@/lib/alphabet-settings'
 
 /** Fields that may contain raw HTML/script (administrators only). */
 const RAW_FIELDS = new Set(['headCode', 'bodyCode', 'robotsTxt', 'homeContent'])
@@ -50,6 +51,8 @@ function coerce(shape: unknown, value: unknown, key = ''): unknown {
 export async function saveSettingsAction<K extends SettingsKey>(key: K, value: AllSettings[K]): Promise<ActionResult> {
   const user = await requireUser(key === 'seo' ? 'edit_others' : 'manage_options')
   if (!(key in DEFAULT_SETTINGS)) return { ok: false, error: 'Unknown settings group.' }
+  // coerce() rebuilds objects from the default shape's keys and would drop every exception.
+  if (key === 'alphabets') return { ok: false, error: 'Use saveAlphabetSettingsAction for the alphabets group.' }
   const current = await getSettings()
   const next = coerce(DEFAULT_SETTINGS[key], value) as AllSettings[K]
 
@@ -94,4 +97,23 @@ export async function saveSettingsAction<K extends SettingsKey>(key: K, value: A
   await saveSettings(key, next)
   revalidateSite()
   return { ok: true, message: 'Settings saved.' }
+}
+
+/** Settings → Alifbolar. Validated by parseAlphabetSettings (not coerce), every string through sanitizePlain. */
+export async function saveAlphabetSettingsAction(formData: FormData): Promise<ActionResult & { row?: number; field?: string }> {
+  await requireUser('manage_options')
+  const parsed = parseAlphabetSettings(formData, sanitizePlain)
+  if (!parsed.ok) return { ok: false, error: parsed.error, row: parsed.row, field: parsed.field }
+  await saveSettings('alphabets', parsed.value)
+  revalidateSite()
+  return { ok: true, message: 'Alifbo sozlamalari saqlandi.' }
+}
+
+/** "Standart roʻyxatni tiklash": empty lists mean the built-in exceptions and protected words. */
+export async function resetAlphabetListsAction(): Promise<ActionResult> {
+  await requireUser('manage_options')
+  const current = await getSettings()
+  await saveSettings('alphabets', { exceptions: {}, protectedWords: [], indexNewLatin: current.alphabets.indexNewLatin !== false })
+  revalidateSite()
+  return { ok: true, message: 'Standart roʻyxatlar tiklandi.' }
 }

@@ -5,21 +5,28 @@ import type { AllSettings } from '@/lib/settings-defaults'
 import { MediaPicker, type StorageMode } from './MediaLibrary'
 import { CheckRow, SelectRow, TextRow, useSettingsForm } from './SettingsForm'
 import { Tabs } from './ui'
+import { AlphabetSettingsSection } from './AlphabetSettings'
+
+export type SettingsTab = 'general' | 'reading' | 'alphabets'
 
 export function GeneralSettingsScreen({
   general,
   reading,
+  alphabets,
+  alphabetDefaults,
   storage,
   envSiteUrl,
   initialTab,
 }: {
   general: AllSettings['general']
   reading: AllSettings['reading']
+  alphabets: AllSettings['alphabets']
+  alphabetDefaults: { exceptions: Record<string, string>; protectedWords: string[] }
   storage: StorageMode
   envSiteUrl: string
-  initialTab: 'general' | 'reading'
+  initialTab: SettingsTab
 }) {
-  const [tab, setTab] = useState<'general' | 'reading'>(initialTab)
+  const [tab, setTab] = useState<SettingsTab>(initialTab)
   const g = useSettingsForm('general', general)
   const r = useSettingsForm('reading', reading)
   const [picker, setPicker] = useState<null | 'logoUrl' | 'faviconUrl'>(null)
@@ -37,9 +44,12 @@ export function GeneralSettingsScreen({
         tabs={[
           { id: 'general', label: 'General' },
           { id: 'reading', label: 'Reading' },
+          { id: 'alphabets', label: 'Alifbolar' },
         ]}
       />
-      {tab === 'general' ? (
+      {tab === 'alphabets' ? (
+        <AlphabetSettingsSection initial={alphabets} defaults={alphabetDefaults} />
+      ) : tab === 'general' ? (
         <>
           <div className="wpa-box">
             <div className="wpa-box__body">
