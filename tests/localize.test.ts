@@ -121,3 +121,22 @@ test('formatDate transliterates when script is given', () => {
   assert.equal(formatDate(d, 'uz', 'Asia/Tashkent', 'latn'), 'Oktabr 2, 2026')
   assert.equal(formatDate(d, 'uz', 'Asia/Tashkent', 'cyrl'), transliterateText('Oktabr 2, 2026', 'cyrl', cfg))
 })
+
+test('memo: list-shaped (empty content) and full post do not collide', () => {
+  const lean = localizePost(post({ id: 70, content: '' }), 'cyrl', cfg)
+  assert.equal(lean.content, '')
+  const full = localizePost(post({ id: 70 }), 'cyrl', cfg)
+  assert.notEqual(full.content, '')
+  assert.ok(full.content.includes('href="/blog/"'))
+})
+
+test('memo: renamed category / edited image alt with same id+updatedAt is not stale', () => {
+  const a = localizePost(post({ id: 71 }), 'cyrl', cfg)
+  const renamed = term({ name: 'Savdo' })
+  const b = localizePost(post({ id: 71, category: renamed, categories: [renamed] }), 'cyrl', cfg)
+  assert.equal(b.category!.name, transliterateText('Savdo', 'cyrl', cfg))
+  assert.notEqual(b.category!.name, a.category!.name)
+  assert.equal(b.categories[0].name, b.category!.name)
+  const c = localizePost(post({ id: 71, image: { id: 2, url: '/uploads/a.jpg', width: 1, height: 1, alt: 'Boshqa' } }), 'cyrl', cfg)
+  assert.equal(c.image!.alt, transliterateText('Boshqa', 'cyrl', cfg))
+})

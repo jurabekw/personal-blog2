@@ -43,9 +43,23 @@ export function localizeTerm(term: TermRef, script: Script, cfg: TranslitConfig)
 const MEMO_MAX = 1000
 const memo = new Map<string, unknown>()
 
+/** Cheap fingerprint of text that is embedded in a post but changes without bumping post.updatedAt. */
+function embeddedFingerprint(p: PostSummary | PostFull): string {
+  const termFp = (t: TermRef | null | undefined) =>
+    t ? [t.name, t.description, JSON.stringify(t.seo ?? {})].join('\u0001') : ''
+  const full = 'content' in p ? (p as PostFull) : null
+  return [
+    full ? `f${full.content.length}` : 's', // list-shaped posts carry content ''
+    p.image?.alt ?? '',
+    termFp(p.category),
+    full ? full.categories?.map(termFp).join('\u0002') : '',
+    full ? full.tags?.map(termFp).join('\u0002') : '',
+  ].join('\u0003')
+}
+
 export function localizePost<T extends PostSummary | PostFull>(p: T, script: Script, cfg: TranslitConfig): T {
   if (script === 'latn') return p
-  const key = `${p.id}|${p.updatedAt.getTime()}|${script}|${cfg.version}`
+  const key = `${p.id}|${p.updatedAt.getTime()}|${script}|${cfg.version}|${embeddedFingerprint(p)}`
   const hit = memo.get(key)
   if (hit) return hit as T
 
