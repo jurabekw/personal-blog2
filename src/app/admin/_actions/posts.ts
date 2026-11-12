@@ -7,6 +7,7 @@ import { can, requireUser, type CurrentUser } from '@/lib/auth'
 import { getSettings, resolveSiteUrl } from '@/lib/data/settings'
 import { sanitizeContent, sanitizePlain } from '@/lib/content/sanitize'
 import { escapeHtml, excerptFromHtml, slugify, wordCountFromHtml } from '@/lib/content/text'
+import { slugCandidates } from '@/lib/content/reserved-slugs'
 import { analyzeReadability, analyzeSeo } from '@/lib/seo/analysis'
 import { replaceVars } from '@/lib/seo/templates'
 import { normalizeRedirectPath } from '@/lib/data/redirects'
@@ -64,21 +65,16 @@ const inputSchema = z.object({
 async function uniqueSlug(base: string, excludeId?: number): Promise<string> {
   const db = getDb()
   const clean = base || `draft-${Date.now().toString(36)}`
-  let slug = clean
-  let n = 2
-  // Reserved paths used by the app itself.
-  const reserved = new Set(['blog', 'category', 'tag', 'search', 'feed', 'admin', 'api', 'og', 'draft-preview', 'page'])
-  while (true) {
-    if (!reserved.has(slug)) {
-      const rows = await db
-        .select({ id: posts.id })
-        .from(posts)
-        .where(excludeId ? and(eq(posts.slug, slug), ne(posts.id, excludeId)) : eq(posts.slug, slug))
-        .limit(1)
-      if (!rows.length) return slug
-    }
-    slug = `${clean}-${n++}`
+  // Reserved paths used by the app itself (incl. the /kirill/ and /yangi/ trees) are skipped.
+  for (const slug of slugCandidates(clean)) {
+    const rows = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(excludeId ? and(eq(posts.slug, slug), ne(posts.id, excludeId)) : eq(posts.slug, slug))
+      .limit(1)
+    if (!rows.length) return slug
   }
+  throw new Error('unreachable')
 }
 
 async function tagIdsFor(names: string[]): Promise<number[]> {

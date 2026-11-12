@@ -5,6 +5,7 @@ import { getSettings, resolveSiteUrl } from '@/lib/data/settings'
 import { convertCopyBoxShortcodes, normalizeRenderedCopyBoxes } from '@/lib/content/render'
 import { sanitizeContent, sanitizePlain } from '@/lib/content/sanitize'
 import { decodeEntities, escapeHtml, slugify, stripTags, wordCountFromHtml } from '@/lib/content/text'
+import { isReservedSlug } from '@/lib/content/reserved-slugs'
 import { buildPathname, readDimensions, storeFile, ALLOWED_TYPES } from '@/lib/storage'
 import type { PageTemplate, PostSeo, SchemaArticleType, SchemaPageType } from '@/lib/types'
 
@@ -343,7 +344,9 @@ export async function importItem(item: NormalizedItem, opts: ImportOptions): Pro
   const warnings: string[] = []
   const title = sanitizePlain(decodeEntities(item.title)) || '(no title)'
   try {
-    const slug = slugify(decodeURIComponent(item.slug || '')) || slugify(title)
+    const imported = slugify(decodeURIComponent(item.slug || '')) || slugify(title)
+    // /kirill/, /yangi/ and other app paths would shadow the post.
+    const slug = isReservedSlug(imported) ? `${imported}-2` : imported
     const [existing] = await db
       .select({ id: posts.id, slug: posts.slug })
       .from(posts)
