@@ -1,4 +1,5 @@
 import type { AlphabetSettings } from '@/lib/translit/types'
+import { DEFAULT_EXCEPTIONS, DEFAULT_PROTECTED_WORDS, makeTranslitConfig } from '@/lib/translit/defaults'
 
 export const MAX_EXCEPTIONS = 2000
 export const MAX_PROTECTED_WORDS = 1000
@@ -46,10 +47,19 @@ export function parseAlphabetSettings(formData: FormData, clean: (s: string) => 
 
   const protectedWords: string[] = []
   const seen = new Set<string>()
-  for (const line of str(formData.get('protectedWords')).split(/\r?\n/)) {
-    const word = line.trim()
+  const lines = str(formData.get('protectedWords')).split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const word = lines[i].trim()
     if (!word || seen.has(word.toLowerCase())) continue
     if (word.length > MAX_LEN) return { ok: false, field: 'protectedWords', error: `“${word.slice(0, 30)}…” juda uzun (${MAX_LEN} belgidan oshmasin).` }
+    if (/\s/u.test(word)) {
+      return {
+        ok: false,
+        field: 'protectedWords',
+        row: i + 1,
+        error: `${i + 1}-qator: “${word}” bitta soʻz boʻlishi kerak (boʻshliqsiz). Har bir soʻzni alohida qatorga yozing.`,
+      }
+    }
     seen.add(word.toLowerCase())
     protectedWords.push(word)
   }
@@ -58,5 +68,25 @@ export function parseAlphabetSettings(formData: FormData, clean: (s: string) => 
   }
 
   const index = formData.get('indexNewLatin')
-  return { ok: true, value: { exceptions, protectedWords, indexNewLatin: index === 'on' || index === 'true' || index === '1' } }
+  // Lists equal to the built-in ones are stored empty, so later built-in improvements still apply.
+  return {
+    ok: true,
+    value: {
+      exceptions: sameExceptions(exceptions) ? {} : exceptions,
+      protectedWords: sameWords(protectedWords) ? [] : protectedWords,
+      indexNewLatin: index === 'on' || index === 'true' || index === '1',
+    },
+  }
+}
+
+const DEFAULTS = makeTranslitConfig(DEFAULT_EXCEPTIONS, DEFAULT_PROTECTED_WORDS)
+
+function sameExceptions(e: Record<string, string>): boolean {
+  const keys = Object.keys(e)
+  return keys.length === Object.keys(DEFAULTS.exceptions).length && keys.every((k) => DEFAULTS.exceptions[k] === e[k])
+}
+
+function sameWords(words: string[]): boolean {
+  const set = new Set(DEFAULTS.protectedWords)
+  return words.length === set.size && words.every((w) => set.has(w))
 }

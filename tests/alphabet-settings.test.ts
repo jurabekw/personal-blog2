@@ -114,3 +114,42 @@ test('parseAlphabetSettings: the clean function runs on every key, value and wor
   assert.deepEqual(r.value.protectedWords, ['xGoogle'])
   assert.ok(seen.includes('<i>aksiya</i>') && seen.includes('<b>акция</b>'))
 })
+
+// ---- Final fix wave ----
+import { DEFAULT_EXCEPTIONS, DEFAULT_PROTECTED_WORDS } from '../src/lib/translit/defaults'
+
+test('parseAlphabetSettings: lists equal to the built-in defaults are stored empty (later built-in changes still apply)', () => {
+  const rows = Object.entries(DEFAULT_EXCEPTIONS).reverse() as [string, string][]
+  const r = parseAlphabetSettings(form(rows, DEFAULT_PROTECTED_WORDS.slice().reverse().join('\n')))
+  assert.deepEqual(r, { ok: true, value: { exceptions: {}, protectedWords: [], indexNewLatin: true } })
+  // Typed differently (case, apostrophes) but equal after normalisation → still the defaults.
+  const upper = rows.map(([k, v]) => [k.toUpperCase(), v.toUpperCase()] as [string, string])
+  const r2 = parseAlphabetSettings(form(upper, DEFAULT_PROTECTED_WORDS.join('\n')))
+  assert.deepEqual(r2.ok && r2.value.exceptions, {})
+  assert.deepEqual(r2.ok && r2.value.protectedWords, [])
+})
+
+test('parseAlphabetSettings: a list that differs from the defaults is stored as typed; the other may still be empty', () => {
+  const rows = [...Object.entries(DEFAULT_EXCEPTIONS), ['kontent', 'контент']] as [string, string][]
+  const r = parseAlphabetSettings(form(rows, DEFAULT_PROTECTED_WORDS.join('\n')))
+  assert.equal(r.ok, true)
+  if (!r.ok) return
+  assert.equal(r.value.exceptions.kontent, 'контент')
+  assert.equal(Object.keys(r.value.exceptions).length, Object.keys(DEFAULT_EXCEPTIONS).length + 1)
+  assert.deepEqual(r.value.protectedWords, [])
+  const words = parseAlphabetSettings(form([], [...DEFAULT_PROTECTED_WORDS.slice(1)].join('\n')))
+  assert.equal(words.ok && words.value.protectedWords.length, DEFAULT_PROTECTED_WORDS.length - 1)
+})
+
+test('parseAlphabetSettings: protected words must be single tokens', () => {
+  for (const bad of ['Google Ads', 'Search\tConsole']) {
+    const r = parseAlphabetSettings(form([], `SEO\n${bad}`))
+    assert.equal(r.ok, false, `${bad} should be rejected`)
+    if (r.ok) continue
+    assert.equal(r.field, 'protectedWords')
+    assert.equal(r.row, 2)
+    assert.match(r.error, /bitta soʻz/)
+  }
+  const ok = parseAlphabetSettings(form([], "Next.js\nChatGPT\nO'zbekiston\nB2B"))
+  assert.equal(ok.ok, true)
+})
