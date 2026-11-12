@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { normalizeForSearch } from './search';
+import { normalizeForSearch } from './search.js';
 
 test('normalizes all alphabets to current latin', () => {
   expect(normalizeForSearch('Маркетинг')).toBe('marketing');

@@ -1,4 +1,4 @@
-import type { TranslitConfig } from './types';
+import type { TranslitConfig } from './types.js';
 
 /** Current-Latin stems whose Cyrillic spelling can't be derived by rules (soft sign, ц). */
 export const DEFAULT_EXCEPTIONS: Record<string, string> = {

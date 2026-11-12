@@ -20,6 +20,13 @@ test('does not treat admin, api or asset paths as pages', () => {
   expect(parseScriptPath('/favicon.svg').isPage).toBe(false);
 });
 
+test('dev-server internals are not pages', () => {
+  expect(parseScriptPath('/@vite/client').isPage).toBe(false);
+  expect(parseScriptPath('/@react-refresh').isPage).toBe(false);
+  expect(parseScriptPath('/src/main.tsx').isPage).toBe(false);
+  expect(parseScriptPath('/node_modules/.vite/deps/react').isPage).toBe(false);
+});
+
 test('builds paths', () => {
   expect(buildScriptPath('cyrl', '/')).toBe('/kirill/');
   expect(buildScriptPath('latn', '/')).toBe('/');

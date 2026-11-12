@@ -85,6 +85,17 @@ export interface SiteSettings {
   showReadingTime: boolean;
   showProgress: boolean;
   analyticsEnabled: boolean;
+  /** Alphabet versions (O'zbek · Ўзбек · Özbek). Missing → built-in defaults. */
+  alphabets?: AlphabetSettings;
+}
+
+export interface AlphabetSettings {
+  /** Current-Latin word or stem → Cyrillic spelling. Replaces the built-in list when present. */
+  exceptions: Record<string, string>;
+  /** Words that always stay in Latin. Replaces the built-in list when present. */
+  protectedWords: string[];
+  /** Whether /yangi/ pages are indexable. Default true. */
+  indexNewLatin: boolean;
 }
 
 export interface ActivityLog {

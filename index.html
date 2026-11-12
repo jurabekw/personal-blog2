@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="uz-Latn">
   <head>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-1R44SWT5LN"></script>
@@ -27,7 +27,6 @@
     <!-- /Yandex.Metrika counter -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jurabek — Personal Writing & Publishing Platform</title>
     <script>
       (function() {
         try {
@@ -55,20 +54,8 @@
         }
       })();
     </script>
-    <meta name="description" content="Dizayn, dasturiy ta'minot arxitekturasi va raqamli mahorat haqida insholar va shaxsiy qaydlar." />
-    
-    <!-- Open Graph / Facebook / Telegram / WhatsApp -->
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Jurabek" />
-    <meta property="og:title" content="Jurabek — Personal Writing & Publishing Platform" />
-    <meta property="og:description" content="Dizayn, dasturiy ta'minot arxitekturasi va raqamli mahorat haqida insholar va shaxsiy qaydlar." />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&w=1200&q=80" />
-    
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Jurabek — Personal Writing & Publishing Platform" />
-    <meta name="twitter:description" content="Dizayn, dasturiy ta'minot arxitekturasi va raqamli mahorat haqida insholar va shaxsiy qaydlar." />
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&w=1200&q=80" />
+    <!--ssr-head-start--><title>Jurabek</title>
+    <meta name="robots" content="noindex, nofollow" /><!--ssr-head-end-->
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" href="/favicon.svg" />
@@ -78,7 +65,8 @@
   </head>
   <body class="bg-[#FAFAF8] dark:bg-[#121211] text-[#111111] dark:text-[#ECECEC] antialiased selection:bg-[#1E3E62] selection:text-white transition-colors duration-200">
     <noscript><div><img src="https://mc.yandex.ru/watch/113581623" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-    <div id="root"></div>
+    <div id="root"><!--ssr-body--></div>
+    <!--ssr-bootstrap-->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

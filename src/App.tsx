@@ -3,6 +3,7 @@ import { api } from './lib/api';
 import { Post, Category, Tag, MediaItem, SiteSettings, ActivityLog, UserSession } from './types';
 import { initialPosts, initialCategories, initialTags, initialMedia, initialSettings } from './data/seedData';
 import { ToastProvider, useToast } from './components/ui/Toast';
+import { readBootstrap } from './ssr/bootstrap';
 
 import { SEOHead } from './components/SEOHead';
 
@@ -31,6 +32,8 @@ import { AdminSettingsView } from './components/admin/AdminSettingsView';
 
 export function JurabekApp() {
   const { toast } = useToast();
+  // Data embedded by the server-rendered page (absent on /admin and in tests).
+  const [boot] = useState(() => readBootstrap());
 
   // Theme state
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -57,6 +60,7 @@ export function JurabekApp() {
     return 'home';
   });
   const [selectedPost, setSelectedPost] = useState<Post | null>(() => {
+    if (boot?.post) return boot.post;
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
       const hash = window.location.hash;
@@ -96,11 +100,11 @@ export function JurabekApp() {
   const [initialPostStatusFilter, setInitialPostStatusFilter] = useState<string>('all');
 
   // Application Data
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [posts, setPosts] = useState<Post[]>(() => boot?.posts ?? []);
+  const [categories, setCategories] = useState<Category[]>(() => boot?.categories ?? []);
   const [tags, setTags] = useState<Tag[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const [settings, setSettings] = useState<SiteSettings>({
+  const [settings, setSettings] = useState<SiteSettings>(() => boot?.settings ?? {
     title: 'Jurabek',
     description: 'Dizayn, dasturiy ta\'minot san\'ati va sokin raqamli interfeyslar haqida shaxsiy jurnal.',
     authorName: 'Jurabek',
@@ -114,7 +118,7 @@ export function JurabekApp() {
     analyticsEnabled: true,
   });
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !boot);
 
   // Handle dark mode class on <html> and <body>
   useEffect(() => {
@@ -308,7 +312,11 @@ export function JurabekApp() {
   const handleSelectPost = async (post: Post) => {
     navigateTo(`/blog/${post.slug}`, { post });
     try {
-      await api.getPostBySlugOrId(post.id, true);
+      const full = await api.getPostBySlugOrId(post.id, true);
+      // Server-embedded list posts carry no body; swap in the full post once fetched.
+      if (!post.content && full?.content) {
+        setSelectedPost((cur) => (cur && cur.id === post.id ? { ...post, content: full.content } : cur));
+      }
     } catch (e) {
       // ignore
     }

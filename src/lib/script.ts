@@ -1,4 +1,4 @@
-import type { Script } from './translit/types';
+import type { Script } from './translit/types.js';
 
 export type { Script };
 
@@ -40,7 +40,10 @@ export function parseScriptPath(pathname: string): { script: Script; path: strin
       break;
     }
   }
-  const isPage = !/^\/(admin|api)(\/|$)/.test(path) && !/\.[a-z0-9]+$/i.test(path);
+  const isPage =
+    !/^\/(admin|api)(\/|$)/.test(path) &&
+    !/^\/(@|src\/|node_modules\/)/.test(raw) &&
+    !/\.[a-z0-9]+$/i.test(path);
   return { script, path, isPage };
 }
 

@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
-import { transliteratePost, transliterateCategory } from './post';
-import { DEFAULT_TRANSLIT_CONFIG as cfg } from './defaults';
-import type { Post } from '../../types';
+import { transliteratePost, transliterateCategory } from './post.js';
+import { DEFAULT_TRANSLIT_CONFIG as cfg } from './defaults.js';
+import type { Post } from '../../types.js';
 
 const samplePost: Post = {
   id: 'p1',

@@ -1,5 +1,5 @@
-import { HTML_LANG, SITE_ORIGIN, buildScriptPath, canonicalUrl } from '../script';
-import type { PageMeta } from './head';
+import { HTML_LANG, SITE_ORIGIN, buildScriptPath, canonicalUrl } from '../script.js';
+import type { PageMeta } from './head.js';
 
 /** JSON-LD for a page: BlogPosting (+FAQPage) for posts, WebSite otherwise. */
 export function buildJsonLd(meta: PageMeta): object {

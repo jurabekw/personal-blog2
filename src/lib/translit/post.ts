@@ -1,7 +1,7 @@
-import { transliterateText } from './core';
-import { transliterateMarkdown } from './markdown';
-import type { Script, TranslitConfig } from './types';
-import type { Category, Post, Tag } from '../../types';
+import { transliterateText } from './core.js';
+import { transliterateMarkdown } from './markdown.js';
+import type { Script, TranslitConfig } from './types.js';
+import type { Category, Post, Tag } from '../../types.js';
 
 const MAX_CACHE = 500;
 const cache = new Map<string, Post>();

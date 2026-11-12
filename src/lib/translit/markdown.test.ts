@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { transliterateMarkdown } from './markdown';
-import { DEFAULT_TRANSLIT_CONFIG as cfg } from './defaults';
+import { transliterateMarkdown } from './markdown.js';
+import { DEFAULT_TRANSLIT_CONFIG as cfg } from './defaults.js';
 
 test('leaves code, urls and html attributes untouched', () => {
   const md =

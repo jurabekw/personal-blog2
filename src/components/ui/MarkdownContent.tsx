@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { parseMarkdownTable } from './MarkdownTable';
-import { FormattedTable } from './FormattedTable';
-import { renderInlineMarkdown } from './MarkdownTable';
+import { parseMarkdownTable } from './MarkdownTable.js';
+import { FormattedTable } from './FormattedTable.js';
+import { renderInlineMarkdown } from './MarkdownTable.js';
 import { Check, Copy } from 'lucide-react';
 
 interface MarkdownContentProps {

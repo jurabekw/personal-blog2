@@ -1,6 +1,6 @@
-import { canonicalPath, canonicalUrl, SITE_ORIGIN, buildScriptPath, type Script } from '../script';
-import { buildJsonLd } from './schema';
-import type { Post } from '../../types';
+import { canonicalPath, canonicalUrl, SITE_ORIGIN, buildScriptPath, type Script } from '../script.js';
+import { buildJsonLd } from './schema.js';
+import type { Post } from '../../types.js';
 
 export interface PageMeta {
   script: Script;

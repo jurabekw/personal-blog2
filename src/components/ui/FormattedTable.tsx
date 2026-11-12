@@ -1,5 +1,5 @@
 import React from 'react';
-import { TableColumn, renderInlineMarkdown } from './MarkdownTable';
+import { TableColumn, renderInlineMarkdown } from './MarkdownTable.js';
 
 interface FormattedTableProps {
   headers: TableColumn[];

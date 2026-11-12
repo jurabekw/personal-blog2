@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { toCyrillic, toNewLatin, transliterateText } from './core';
-import { DEFAULT_TRANSLIT_CONFIG } from './defaults';
+import { toCyrillic, toNewLatin, transliterateText } from './core.js';
+import { DEFAULT_TRANSLIT_CONFIG } from './defaults.js';
 
 const cfg = DEFAULT_TRANSLIT_CONFIG;
 

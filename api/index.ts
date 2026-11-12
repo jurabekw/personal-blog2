@@ -1,4 +1,6 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Post, Category, Tag, MediaItem, SiteSettings, ActivityLog } from '../src/types';
@@ -13,6 +15,36 @@ import {
   requireEnv,
   DbStatus
 } from './db.js';
+import { renderPage } from './ssr/renderPage.js';
+import { parseScriptPath } from '../src/lib/script.js';
+
+export type TemplateProvider = (req: express.Request) => Promise<string>;
+
+/** True when the Cyrillic (/kirill/) and new Latin (/yangi/) versions are switched on. */
+export function alphabetsEnabled(): boolean {
+  return process.env.ALPHABETS_ENABLED === 'true';
+}
+
+let cachedTemplate: string | null = null;
+
+/**
+ * The built SPA shell (dist/_shell.html). Read from disk when bundled with the function
+ * (vercel.json includeFiles); otherwise fetched from the deployment's static files.
+ */
+export const defaultTemplateProvider: TemplateProvider = async (req) => {
+  if (cachedTemplate) return cachedTemplate;
+  const file = path.join(process.cwd(), 'dist', '_shell.html');
+  if (fs.existsSync(file)) {
+    cachedTemplate = fs.readFileSync(file, 'utf-8');
+    return cachedTemplate;
+  }
+  const host = req.get('host') || 'www.jurabek.blog';
+  const proto = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? 'http' : 'https';
+  const res = await fetch(`${proto}://${host}/_shell.html`);
+  if (!res.ok) throw new Error(`Template fetch failed: ${res.status}`);
+  cachedTemplate = await res.text();
+  return cachedTemplate;
+};
 
 export function calculateReadingTime(text: string): { wordCount: number; readingTimeMinutes: number } {
   if (!text) return { wordCount: 0, readingTimeMinutes: 1 };
@@ -31,7 +63,7 @@ export function escapeXml(unsafe: string): string {
     .replace(/'/g, '&apos;');
 }
 
-export function createExpressApp() {
+export function createExpressApp(options: { getTemplate?: TemplateProvider } = {}) {
   const app = express();
 
   // CORS Middleware
@@ -1283,6 +1315,18 @@ export function createExpressApp() {
       res.send(xml);
     } catch (err: any) {
       res.status(500).send('Error generating RSS feed');
+    }
+  });
+
+  // Server-rendered public pages in every alphabet (/, /kirill/..., /yangi/...)
+  app.get('*', async (req, res, next) => {
+    if (!parseScriptPath(req.path).isPage) return next();
+    try {
+      const template = await (options.getTemplate ?? defaultTemplateProvider)(req);
+      const result = await renderPage(req.originalUrl, template, { alphabetsEnabled: alphabetsEnabled() });
+      res.status(result.status).set(result.headers).send(result.html);
+    } catch (err) {
+      next(err);
     }
   });
 

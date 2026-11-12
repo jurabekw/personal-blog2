@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { buildHeadTags, renderHeadTags, type HeadTag, type PageMeta } from './head';
-import type { Post } from '../../types';
+import { buildHeadTags, renderHeadTags, type HeadTag, type PageMeta } from './head.js';
+import type { Post } from '../../types.js';
 
 const p: Post = {
   id: 'p1', title: 'Маркетинг нима', slug: 'marketing-nima', excerpt: 'Тавсиф', content: '',

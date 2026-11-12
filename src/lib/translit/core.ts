@@ -1,4 +1,4 @@
-import type { Script, TranslitConfig } from './types';
+import type { Script, TranslitConfig } from './types.js';
 
 /** Every apostrophe-like character people type for oʻ, gʻ and the tutuq belgisi. */
 export const APOS_CLASS = "'‘’ʻʼ`";

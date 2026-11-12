@@ -32,8 +32,21 @@
       "destination": "/api/index.ts"
     },
     {
+      "source": "/admin",
+      "destination": "/_shell.html"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/_shell.html"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api/index.ts"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "dist/_shell.html"
+    }
+  }
 }

@@ -1,5 +1,5 @@
-import { transliterateText } from './core';
-import type { Script, TranslitConfig } from './types';
+import { transliterateText } from './core.js';
+import type { Script, TranslitConfig } from './types.js';
 
 /**
  * Inline segments that must never be transliterated: inline code, link/image targets,
