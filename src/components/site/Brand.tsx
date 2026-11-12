@@ -1,17 +1,27 @@
 import Link from 'next/link'
 
 /** Site brand: custom logo, or the green initial mark + name + tagline (theme jb_brand()). */
-export function Brand({ siteName, tagline, logoUrl }: { siteName: string; tagline: string; logoUrl: string }) {
+export function Brand({
+  siteName,
+  tagline,
+  logoUrl,
+  href = '/',
+}: {
+  siteName: string
+  tagline: string
+  logoUrl: string
+  href?: string
+}) {
   if (logoUrl) {
     return (
-      <Link className="jb-brand" href="/" rel="home">
+      <Link className="jb-brand" href={href} rel="home">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logoUrl} alt={siteName} height={40} style={{ height: 40, width: 'auto' }} />
       </Link>
     )
   }
   return (
-    <Link className="jb-brand" href="/" rel="home">
+    <Link className="jb-brand" href={href} rel="home">
       <span className="jb-brand__mark" aria-hidden="true">
         {Array.from(siteName)[0] ?? ''}
       </span>

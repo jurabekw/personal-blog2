@@ -9,7 +9,9 @@ import { buildGraph } from '@/lib/seo/schema'
 import { getTranslitConfig } from '@/lib/translit'
 import { SinglePage, SinglePost } from '@/components/site/Article'
 import type { Crumb } from '@/components/site/parts'
-import { localizer, scriptHref, type Script } from '@/lib/alphabet'
+import { localizer, redirectHref, type Script } from '@/lib/alphabet'
+import { getT } from '@/lib/i18n'
+import { scriptContentLinks } from '@/lib/content/links'
 
 type Props = { params: Promise<{ slug: string }> }
 
@@ -39,7 +41,7 @@ export async function renderSlug(script: Script, { params }: Props) {
   if (!source) {
     const match = await findRedirect(`/${slug}`)
     if (match && match.statusCode !== 410 && match.target) {
-      const target = scriptHref(script, match.target)
+      const target = await redirectHref(script, match.target)
       if (match.statusCode === 301 || match.statusCode === 308) permanentRedirect(target)
       redirect(target)
     }
@@ -47,19 +49,24 @@ export async function renderSlug(script: Script, { params }: Props) {
   }
 
   const { settings: rawSettings, siteUrl, resolved, url } = await seoFor({ kind: source.type, path: source.path, post: source, script })
-  const L = localizer(script, getTranslitConfig(rawSettings.alphabets), siteUrl)
+  const cfg = getTranslitConfig(rawSettings.alphabets)
+  const L = localizer(script, cfg, siteUrl)
+  const t = getT(script, cfg)
   const settings = L.settings(rawSettings)
   const localized = L.post(source)
   const rendered = renderContent(localized.content, {
     media: await getMediaInfoForHtml(source.content),
     tocTitle: settings.appearance.sidebar.toc.title,
+    ...(script === 'latn' ? {} : { copyLabel: t.copy, copiedLabel: t.copied }),
   })
+  // In-content links to this site stay in the page's alphabet (identity for latn).
+  const html = scriptContentLinks(rendered.html, script, siteUrl)
   // Localized posts are shared (memoized) objects: build a new one instead of mutating.
   const post = {
     ...localized,
     faq: (localized.faq || [])
       .filter((q) => q.question?.trim() && q.answer?.trim())
-      .map((q) => ({ question: q.question, answer: sanitizeContent(q.answer) })),
+      .map((q) => ({ question: q.question, answer: scriptContentLinks(sanitizeContent(q.answer), script, siteUrl) })),
   }
 
   const home = settings.seo.breadcrumbs.homeLabel
@@ -76,7 +83,7 @@ export async function renderSlug(script: Script, { params }: Props) {
       pageType,
       crumbs: [{ label: home, href: '/' }, { label: post.seo.breadcrumbTitle || post.title }],
     })
-    return <SinglePage post={post} html={rendered.html} settings={settings} graph={graph} />
+    return <SinglePage post={post} html={html} settings={settings} graph={graph} script={script} siteUrl={siteUrl} />
   }
 
   // Visible breadcrumb matches the theme (Home / Blog / Category); structured data adds the post title.
@@ -96,7 +103,7 @@ export async function renderSlug(script: Script, { params }: Props) {
   return (
     <SinglePost
       post={post}
-      html={rendered.html}
+      html={html}
       headings={rendered.headings}
       settings={settings}
       url={url}
@@ -104,6 +111,8 @@ export async function renderSlug(script: Script, { params }: Props) {
       graph={graph}
       related={L.posts(related)}
       adjacent={{ prev: adjacent.prev ? L.post(adjacent.prev) : null, next: adjacent.next ? L.post(adjacent.next) : null }}
+      script={script}
+      siteUrl={siteUrl}
     />
   )
 }

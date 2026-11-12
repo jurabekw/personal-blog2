@@ -1,20 +1,19 @@
 import Link from 'next/link'
-import { getSettings } from '@/lib/data/settings'
 import { getTaxonomies, type TermRef } from '@/lib/data/posts'
-import { t } from '@/lib/i18n'
+import { alphabetContext, localizer, type Script, type Ui } from '@/lib/alphabet'
 import { Brand } from './Brand'
 
-function CategoryTree({ items, all, parentId }: { items: TermRef[]; all: TermRef[]; parentId: number | null }) {
+function CategoryTree({ items, all, parentId, ui }: { items: TermRef[]; all: TermRef[]; parentId: number | null; ui: Ui }) {
   return (
     <>
       {items.map((c) => {
         const children = all.filter((x) => x.parentId === c.id)
         return (
           <li key={c.id} className="cat-item">
-            <Link href={c.path}>{c.name}</Link>
+            <Link href={ui.href(c.path)}>{c.name}</Link>
             {children.length ? (
               <ul className="children">
-                <CategoryTree items={children} all={all} parentId={c.id} />
+                <CategoryTree items={children} all={all} parentId={c.id} ui={ui} />
               </ul>
             ) : null}
           </li>
@@ -25,9 +24,10 @@ function CategoryTree({ items, all, parentId }: { items: TermRef[]; all: TermRef
 }
 
 /** footer.php */
-export async function Footer() {
-  const settings = await getSettings()
-  const { categories } = await getTaxonomies()
+export async function Footer({ script }: { script: Script }) {
+  const { settings, cfg, siteUrl, ui } = await alphabetContext(script)
+  const t = ui.t
+  const categories = localizer(script, cfg, siteUrl).terms((await getTaxonomies()).categories)
   const nonEmpty = categories.filter(
     (c) => c.count > 0 || categories.some((child) => child.parentId === c.id && child.count > 0),
   )
@@ -39,7 +39,7 @@ export async function Footer() {
     <footer className="jb-footer">
       <div className="jb-shell jb-footer__grid">
         <div>
-          <Brand siteName={settings.general.siteName} tagline={settings.general.tagline} logoUrl={settings.general.logoUrl} />
+          <Brand siteName={settings.general.siteName} tagline={settings.general.tagline} logoUrl={settings.general.logoUrl} href={ui.href('/')} />
           {settings.appearance.footerText ? (
             <p className="jb-body jb-muted jb-footer__text">{settings.appearance.footerText}</p>
           ) : null}
@@ -48,7 +48,7 @@ export async function Footer() {
         <nav aria-label={t.categories}>
           <h2>{t.categories}</h2>
           <ul>
-            <CategoryTree items={roots} all={nonEmpty} parentId={null} />
+            <CategoryTree items={roots} all={nonEmpty} parentId={null} ui={ui} />
           </ul>
         </nav>
 

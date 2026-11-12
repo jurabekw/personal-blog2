@@ -6,12 +6,12 @@ import { renderContent } from '@/lib/content/render'
 import { metadataFor, seoFor } from '@/lib/seo/page'
 import { buildGraph } from '@/lib/seo/schema'
 import { getTranslitConfig } from '@/lib/translit'
-import { t } from '@/lib/i18n'
+import { scriptContentLinks } from '@/lib/content/links'
 import { AuthorPhoto, CategoryChips, FeatureCard, JsonLd, NoResults, PostCard } from '@/components/site/parts'
 import { Sidebar } from '@/components/site/Sidebar'
 import { Enhancer } from '@/components/site/Enhancer'
 import { SetupNotice } from '@/components/site/SetupNotice'
-import { localizer, type Script } from '@/lib/alphabet'
+import { localizer, uiFor, type Script } from '@/lib/alphabet'
 
 export function metadataHome(script: Script): Promise<Metadata> {
   return metadataFor({ kind: 'home', path: '/', script })
@@ -22,7 +22,10 @@ export async function renderHome(script: Script) {
   if (!isDatabaseConfigured()) return <SetupNotice />
 
   const { settings: raw, siteUrl, resolved, url } = await seoFor({ kind: 'home', path: '/', script })
-  const L = localizer(script, getTranslitConfig(raw.alphabets), siteUrl)
+  const cfg = getTranslitConfig(raw.alphabets)
+  const L = localizer(script, cfg, siteUrl)
+  const ui = uiFor(script, cfg, siteUrl)
+  const { t, href } = ui
   const settings = L.settings(raw)
   const { appearance, general, reading } = settings
   const { hero, author } = appearance
@@ -30,7 +33,14 @@ export async function renderHome(script: Script) {
   const recent = L.posts(await getRecentPosts(Math.max(1, reading.homeRecentCount), featuredRaw?.id ?? 0))
   const featured = featuredRaw ? L.post(featuredRaw) : null
   const homeHtml = appearance.homeContent?.trim()
-    ? renderContent(appearance.homeContent, { media: await getMediaInfoForHtml(appearance.homeContent) }).html
+    ? scriptContentLinks(
+        renderContent(appearance.homeContent, {
+          media: await getMediaInfoForHtml(raw.appearance.homeContent),
+          ...(script === 'latn' ? {} : { copyLabel: t.copy, copiedLabel: t.copied }),
+        }).html,
+        script,
+        siteUrl,
+      )
     : ''
   const lang = general.language
   const tz = general.timezone
@@ -48,11 +58,11 @@ export async function renderHome(script: Script) {
               </h1>
               {hero.text ? <p className="jb-hero__text">{hero.text}</p> : null}
               <div className="jb-hero__actions">
-                <Link className="jb-btn jb-btn--primary jb-btn--lg" href="/blog/">
+                <Link className="jb-btn jb-btn--primary jb-btn--lg" href={href('/blog/')}>
                   {t.viewPosts}
                 </Link>
                 {author.aboutUrl ? (
-                  <Link className="jb-btn jb-btn--ghost jb-btn--lg" href={author.aboutUrl}>
+                  <Link className="jb-btn jb-btn--ghost jb-btn--lg" href={href(author.aboutUrl)}>
                     {t.aboutMe}
                   </Link>
                 ) : null}
@@ -80,7 +90,7 @@ export async function renderHome(script: Script) {
         ) : null}
         <div className="jb-shell">
           {!hero.enabled ? <h1 className="screen-reader-text">{general.siteName}</h1> : null}
-          <CategoryChips categories={L.terms(tax.categories)} />
+          <CategoryChips categories={L.terms(tax.categories)} ui={ui} />
 
           <div className="jb-layout jb-layout--sidebar">
             <div>
@@ -90,7 +100,7 @@ export async function renderHome(script: Script) {
                     {t.featuredPost}
                   </h2>
                   <div className="jb-section__body">
-                    <FeatureCard post={featured} language={lang} timezone={tz} />
+                    <FeatureCard post={featured} language={lang} timezone={tz} ui={ui} />
                   </div>
                 </section>
               ) : null}
@@ -101,26 +111,28 @@ export async function renderHome(script: Script) {
                     <h2 id="jb-recent-title" className="jb-section__title">
                       {t.recentPosts}
                     </h2>
-                    <Link className="jb-body-medium" href="/blog/">
+                    <Link className="jb-body-medium" href={href('/blog/')}>
                       {t.allArrow}
                     </Link>
                   </div>
                   <div className="jb-grid jb-grid--2">
                     {recent.map((p) => (
-                      <PostCard key={p.id} post={p} language={lang} timezone={tz} />
+                      <PostCard key={p.id} post={p} language={lang} timezone={tz} ui={ui} />
                     ))}
                   </div>
                 </section>
               ) : null}
 
-              {!featured && !recent.length ? <NoResults /> : null}
+              {!featured && !recent.length ? <NoResults ui={ui} /> : null}
             </div>
 
-            <Sidebar />
+            <Sidebar script={script} />
           </div>
         </div>
       </main>
-      {homeHtml.includes('jb-copy-box') ? <Enhancer /> : null}
+      {homeHtml.includes('jb-copy-box') ? (
+        <Enhancer {...(script === 'latn' ? {} : { labels: { copy: t.copy, copied: t.copied, copyFailed: t.copyFailed } })} />
+      ) : null}
     </>
   )
 }

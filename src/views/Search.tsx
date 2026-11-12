@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { listPublishedPosts } from '@/lib/data/posts'
 import { metadataFor } from '@/lib/seo/page'
-import { t } from '@/lib/i18n'
 import { NoResults, PostRow, SearchForm } from '@/components/site/parts'
 import { Sidebar } from '@/components/site/Sidebar'
 import { alphabetContext, localizer, type Script } from '@/lib/alphabet'
@@ -22,7 +21,8 @@ export async function renderSearch(script: Script, { searchParams }: Props) {
   const sp = await searchParams
   const q = first(sp.q).trim().slice(0, 100)
   const page = Math.max(1, Number(first(sp.page)) || 1)
-  const { settings, siteUrl, cfg } = await alphabetContext(script)
+  const { settings, siteUrl, cfg, ui } = await alphabetContext(script)
+  const { t, href } = ui
   const perPage = Math.max(1, settings.reading.postsPerPage)
   const found = q ? await listPublishedPosts({ search: q, page, perPage }) : { items: [], total: 0 }
   const items = localizer(script, cfg, siteUrl).posts(found.items)
@@ -34,7 +34,7 @@ export async function renderSearch(script: Script, { searchParams }: Props) {
       <div className="jb-shell">
         <header className="jb-page-header">
           <h1>{t.searchFor(q)}</h1>
-          <SearchForm defaultValue={q} />
+          <SearchForm defaultValue={q} ui={ui} />
         </header>
         <div className="jb-layout jb-layout--sidebar">
           <div>
@@ -42,7 +42,7 @@ export async function renderSearch(script: Script, { searchParams }: Props) {
               <>
                 <div className="jb-list">
                   {items.map((p) => (
-                    <PostRow key={p.id} post={p} language={language} timezone={timezone} />
+                    <PostRow key={p.id} post={p} language={language} timezone={timezone} ui={ui} />
                   ))}
                 </div>
                 {pages > 1 ? (
@@ -53,7 +53,7 @@ export async function renderSearch(script: Script, { searchParams }: Props) {
                           {n === page ? (
                             <span className="page-numbers current" aria-current="page">{n}</span>
                           ) : (
-                            <a className="page-numbers" href={`/search/?q=${encodeURIComponent(q)}&page=${n}`}>{n}</a>
+                            <a className="page-numbers" href={href(`/search/?q=${encodeURIComponent(q)}&page=${n}`)}>{n}</a>
                           )}
                         </li>
                       ))}
@@ -62,10 +62,10 @@ export async function renderSearch(script: Script, { searchParams }: Props) {
                 ) : null}
               </>
             ) : (
-              <NoResults />
+              <NoResults ui={ui} />
             )}
           </div>
-          <Sidebar />
+          <Sidebar script={script} />
         </div>
       </div>
     </main>

@@ -84,3 +84,19 @@ html[data-theme="dark"] .jb-theme-toggle .jb-theme-toggle__icon--sun { stroke: v
 .jb-content a { overflow-wrap: anywhere; }
 .jb-content img { max-width: 100%; height: auto; }
 .jb-table-wrap { max-width: 100%; }
+
+/* Alphabet switcher: O'zbek · Ўзбек · Özbek (header actions and mobile menu). */
+.jb-alphabets ul { list-style: none; margin: 0; padding: 2px; display: flex; gap: 2px; border: 1px solid var(--jb-hairline); border-radius: var(--jb-radius-full); background: var(--jb-white); }
+.jb-alphabets__link {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 0 var(--jb-space-m);
+  border-radius: var(--jb-radius-full); color: var(--jb-ink-mid); font-family: var(--jb-font-body);
+  font-size: 12.75px; font-weight: 500; line-height: 1; text-decoration: none; white-space: nowrap;
+}
+.jb-alphabets__link:hover { color: var(--jb-ink); background: var(--jb-surface); }
+.jb-alphabets__link.is-active { color: var(--jb-ink); background: var(--jb-surface-blue); font-weight: 600; }
+.jb-alphabets__link:focus-visible { outline: 2px solid var(--jb-green); outline-offset: 1px; }
+.jb-mobile-nav .jb-alphabets { padding-bottom: var(--jb-space-xl); }
+.jb-mobile-nav .jb-alphabets ul { flex-direction: row; padding: 2px; gap: 2px; width: max-content; }
+.jb-mobile-nav .jb-alphabets__link { font-size: 13.6px; min-height: 36px; padding: 0 var(--jb-space-lg); }
+@media (max-width: 991px) { .jb-alphabets--desktop { display: none; } }
+@media (min-width: 992px) { .jb-alphabets--mobile { display: none; } }

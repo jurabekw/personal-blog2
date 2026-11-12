@@ -4,8 +4,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import type { MenuItem } from '@/lib/types'
-import { t } from '@/lib/i18n'
+import { stripScript, type Script } from '@/lib/script'
+import { t } from '@/lib/ui-strings'
 import { Brand } from './Brand'
+import { AlphabetSwitcher } from './AlphabetSwitcher'
+
+/** Header UI text, transliterated on the server for the page's alphabet. */
+export type HeaderStrings = Pick<typeof t, 'mainMenu' | 'openMenu' | 'darkModeOn' | 'lightModeOn' | 'alphabets'>
 
 interface HeaderProps {
   siteName: string
@@ -14,16 +19,23 @@ interface HeaderProps {
   menu: MenuItem[]
   ctaText: string
   ctaUrl: string
+  script: Script
+  /** Defaults to the Latin strings. */
+  strings?: HeaderStrings
+  homeHref?: string
 }
 
+/** Compares paths without the alphabet prefix, so /kirill/ is not "current" on every /kirill/… page. */
 function isCurrent(pathname: string, url: string): boolean {
   if (/^https?:\/\//.test(url)) return false
   const clean = (p: string) => (p.endsWith('/') ? p : p + '/')
-  if (url === '/' || url === '') return pathname === '/'
-  return clean(pathname).startsWith(clean(url))
+  const page = stripScript(pathname).path
+  const target = url === '' ? '/' : stripScript(url).path
+  if (target === '/' || target === '') return page === '/'
+  return clean(page).startsWith(clean(target))
 }
 
-function MenuLinks({ items, pathname, depth = 0 }: { items: MenuItem[]; pathname: string; depth?: number }) {
+function MenuLinks({ items, pathname, home, depth = 0 }: { items: MenuItem[]; pathname: string; home: string; depth?: number }) {
   return (
     <ul className={depth ? 'sub-menu' : undefined}>
       {items.map((item) => {
@@ -36,11 +48,11 @@ function MenuLinks({ items, pathname, depth = 0 }: { items: MenuItem[]; pathname
                 {item.label}
               </a>
             ) : (
-              <Link href={item.url || '/'} aria-current={current && pathname === item.url ? 'page' : undefined}>
+              <Link href={item.url || home} aria-current={current && pathname === item.url ? 'page' : undefined}>
                 {item.label}
               </Link>
             )}
-            {item.children?.length && depth < 1 ? <MenuLinks items={item.children} pathname={pathname} depth={depth + 1} /> : null}
+            {item.children?.length && depth < 1 ? <MenuLinks items={item.children} pathname={pathname} home={home} depth={depth + 1} /> : null}
           </li>
         )
       })}
@@ -48,7 +60,7 @@ function MenuLinks({ items, pathname, depth = 0 }: { items: MenuItem[]; pathname
   )
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ strings = t }: { strings?: Pick<HeaderStrings, 'darkModeOn' | 'lightModeOn'> }) {
   const [dark, setDark] = useState(false)
 
   useEffect(() => {
@@ -72,7 +84,7 @@ export function ThemeToggle() {
       type="button"
       role="switch"
       aria-checked={dark}
-      aria-label={dark ? t.lightModeOn : t.darkModeOn}
+      aria-label={dark ? strings.lightModeOn : strings.darkModeOn}
       onClick={toggle}
       suppressHydrationWarning
     >
@@ -90,7 +102,7 @@ export function ThemeToggle() {
   )
 }
 
-export function Header({ siteName, tagline, logoUrl, menu, ctaText, ctaUrl }: HeaderProps) {
+export function Header({ siteName, tagline, logoUrl, menu, ctaText, ctaUrl, script, strings = t, homeHref = '/' }: HeaderProps) {
   const pathname = usePathname() || '/'
   const [open, setOpen] = useState(false)
 
@@ -108,16 +120,22 @@ export function Header({ siteName, tagline, logoUrl, menu, ctaText, ctaUrl }: He
   return (
     <header className="jb-header">
       <div className="jb-shell jb-header__inner">
-        <Brand siteName={siteName} tagline={tagline} logoUrl={logoUrl} />
+        <Brand siteName={siteName} tagline={tagline} logoUrl={logoUrl} href={homeHref} />
 
         {menu.length ? (
-          <nav className="jb-nav" aria-label={t.mainMenu}>
-            <MenuLinks items={menu} pathname={pathname} />
+          <nav className="jb-nav" aria-label={strings.mainMenu}>
+            <MenuLinks items={menu} pathname={pathname} home={homeHref} />
           </nav>
         ) : null}
 
         <div className="jb-header__actions">
-          <ThemeToggle />
+          <AlphabetSwitcher
+            script={script}
+            path={pathname}
+            label={strings.alphabets}
+            className={menu.length ? 'jb-alphabets--desktop' : undefined}
+          />
+          <ThemeToggle strings={strings} />
           {ctaText && ctaUrl ? (
             <a className="jb-btn jb-btn--primary" href={ctaUrl}>
               {ctaText}
@@ -129,7 +147,7 @@ export function Header({ siteName, tagline, logoUrl, menu, ctaText, ctaUrl }: He
               type="button"
               aria-expanded={open}
               aria-controls="jb-mobile-nav"
-              aria-label={t.openMenu}
+              aria-label={strings.openMenu}
               onClick={() => setOpen((v) => !v)}
             >
               <span aria-hidden="true" />
@@ -141,7 +159,8 @@ export function Header({ siteName, tagline, logoUrl, menu, ctaText, ctaUrl }: He
       {menu.length ? (
         <div id="jb-mobile-nav" className={`jb-mobile-nav${open ? ' is-open' : ''}`}>
           <div className="jb-shell">
-            <MenuLinks items={menu} pathname={pathname} />
+            <MenuLinks items={menu} pathname={pathname} home={homeHref} />
+            <AlphabetSwitcher script={script} path={pathname} label={strings.alphabets} className="jb-alphabets--mobile" />
           </div>
         </div>
       ) : null}

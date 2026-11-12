@@ -1,8 +1,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { getSettings } from '@/lib/data/settings'
 import { getRecentPosts, getTaxonomies } from '@/lib/data/posts'
-import { t } from '@/lib/i18n'
+import { alphabetContext, localizer, type Script } from '@/lib/alphabet'
+import { transliterateText } from '@/lib/translit'
 import type { Heading } from '@/lib/types'
 import { AuthorPhoto, canOptimize } from './parts'
 
@@ -73,14 +73,18 @@ export function TocNav({ headings, title }: { headings: Heading[]; title: string
 }
 
 /** sidebar.php: Men haqimda → Blog navigatsiyasi → Mundarija (post pages only). */
-export async function Sidebar({ headings }: { headings?: Heading[] }) {
-  const settings = await getSettings()
+export async function Sidebar({ headings, script }: { headings?: Heading[]; script: Script }) {
+  const { settings, cfg, siteUrl, ui } = await alphabetContext(script)
+  const { t, href } = ui
+  const L = localizer(script, cfg, siteUrl)
+  /** Theme fallback titles (not in settings) in the page's alphabet. */
+  const fallback = (latin: string) => (script === 'latn' ? latin : transliterateText(latin, script, cfg))
   const { sidebar, author } = settings.appearance
   const tax = sidebar.blogNav.enabled && sidebar.blogNav.showCategories ? await getTaxonomies() : null
-  const categories = tax ? tax.categories.filter((c) => c.count > 0) : []
+  const categories = tax ? L.terms(tax.categories.filter((c) => c.count > 0)) : []
   const recent =
     sidebar.blogNav.enabled && sidebar.blogNav.showRecent
-      ? await getRecentPosts(Math.min(10, Math.max(1, sidebar.blogNav.recentCount)))
+      ? L.posts(await getRecentPosts(Math.min(10, Math.max(1, sidebar.blogNav.recentCount))))
       : []
 
   return (
@@ -99,7 +103,7 @@ export async function Sidebar({ headings }: { headings?: Heading[] }) {
             {author.bio ? <p className="jb-about__bio">{author.bio}</p> : null}
             <SocialLinks socials={author.socials} />
             {author.aboutUrl ? (
-              <Link className="jb-about__more" href={author.aboutUrl}>
+              <Link className="jb-about__more" href={href(author.aboutUrl)}>
                 {t.fullAbout}
               </Link>
             ) : null}
@@ -109,14 +113,14 @@ export async function Sidebar({ headings }: { headings?: Heading[] }) {
 
       {sidebar.blogNav.enabled && (categories.length || recent.length) ? (
         <section className="jb-widget widget_jb_blog_nav">
-          <h2 className="jb-widget__title">{sidebar.blogNav.title || 'Blog navigatsiyasi'}</h2>
+          <h2 className="jb-widget__title">{sidebar.blogNav.title || fallback('Blog navigatsiyasi')}</h2>
           {categories.length ? (
             <div className="jb-nav-block jb-nav-block--categories">
               <Subheading>{t.categories}</Subheading>
               <ul className="jb-cat-list">
                 {categories.map((c) => (
                   <li key={c.id}>
-                    <Link href={c.path}>
+                    <Link href={href(c.path)}>
                       <span>{c.name}</span>
                       <span className="jb-count">{c.count}</span>
                     </Link>
@@ -131,7 +135,7 @@ export async function Sidebar({ headings }: { headings?: Heading[] }) {
               <ul className="jb-recent-list">
                 {recent.map((p) => (
                   <li key={p.id}>
-                    <Link href={p.path}>
+                    <Link href={href(p.path)}>
                       {p.image ? (
                         <Image
                           className="jb-recent-list__thumb"
@@ -156,7 +160,7 @@ export async function Sidebar({ headings }: { headings?: Heading[] }) {
 
       {sidebar.toc.enabled && headings && headings.length >= 2 ? (
         <section className="jb-widget widget_jb_article_sections">
-          <TocNav headings={headings} title={sidebar.toc.title || 'Mundarija'} />
+          <TocNav headings={headings} title={sidebar.toc.title || fallback('Mundarija')} />
         </section>
       ) : null}
     </aside>

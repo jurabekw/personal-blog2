@@ -1,7 +1,13 @@
 'use client'
 
 import { useEffect } from 'react'
-import { t } from '@/lib/i18n'
+import { t as latin } from '@/lib/ui-strings'
+
+export interface EnhancerLabels {
+  copy: string
+  copied: string
+  copyFailed: string
+}
 
 function copyText(text: string): Promise<void> {
   if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text)
@@ -25,7 +31,8 @@ function copyText(text: string): Promise<void> {
  * reading progress bar, "Mundarija" scroll-spy, copy-link and copy-box buttons.
  * Renders nothing; attaches listeners to server-rendered markup.
  */
-export function Enhancer() {
+export function Enhancer({ labels }: { labels?: EnhancerLabels } = {}) {
+  const t = labels ?? latin
   useEffect(() => {
     const cleanups: (() => void)[] = []
 
@@ -147,7 +154,7 @@ export function Enhancer() {
     }
 
     return () => cleanups.forEach((c) => c())
-  }, [])
+  }, [t.copy, t.copied, t.copyFailed])
 
   return null
 }

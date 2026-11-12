@@ -6,23 +6,19 @@ import '@/styles/extras.css'
 import { Header } from './Header'
 import { Footer } from './Footer'
 import { CustomCode } from './CustomCode'
-import { getSettings, resolveSiteUrl } from '@/lib/data/settings'
 import { DEFAULT_SETTINGS } from '@/lib/settings-defaults'
-import { localizeSettings } from '@/lib/localize'
-import { getTranslitConfig } from '@/lib/translit'
-import type { Script as Alphabet } from '@/lib/script'
-import { t } from '@/lib/i18n'
+import { alphabetContext, type Script as Alphabet } from '@/lib/alphabet'
 
 /**
  * Public site chrome (header, footer, analytics) shared by every alphabet's root layout.
- * Settings are localized for the alphabet; full script-awareness of the chrome parts comes later.
+ * Settings, UI text and internal links follow the alphabet; Latin output is unchanged.
  */
 export async function SiteChrome({ script, children }: { script: Alphabet; children: React.ReactNode }) {
   preload('/fonts/montserrat-latin-wght-normal.woff2', { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' })
   preload('/fonts/golos-text-latin-wght-normal.woff2', { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' })
 
-  const raw = await getSettings()
-  const settings = localizeSettings(raw, script, getTranslitConfig(raw.alphabets), resolveSiteUrl(raw))
+  const { settings, ui } = await alphabetContext(script)
+  const t = ui.t
   const { appearance, general, menus, seo } = settings
   const color = /^#[0-9a-f]{3,8}$/i.test(appearance.primaryColor) ? appearance.primaryColor : DEFAULT_SETTINGS.appearance.primaryColor
   const width = Math.min(1440, Math.max(960, Number(appearance.contentWidth) || 1180))
@@ -55,10 +51,23 @@ export async function SiteChrome({ script, children }: { script: Alphabet; child
         logoUrl={general.logoUrl}
         menu={menus.primary}
         ctaText={appearance.headerCtaText}
-        ctaUrl={appearance.headerCtaUrl}
+        ctaUrl={ui.href(appearance.headerCtaUrl)}
+        script={script}
+        {...(script === 'latn'
+          ? {}
+          : {
+              homeHref: ui.href('/'),
+              strings: {
+                mainMenu: t.mainMenu,
+                openMenu: t.openMenu,
+                darkModeOn: t.darkModeOn,
+                lightModeOn: t.lightModeOn,
+                alphabets: t.alphabets,
+              },
+            })}
       />
       <div id="jb-content">{children}</div>
-      <Footer />
+      <Footer script={script} />
 
       {/* Analytics load after the page is interactive so they never slow down rendering. */}
       {a.ga4 ? (

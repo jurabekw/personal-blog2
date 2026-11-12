@@ -4,8 +4,7 @@ import { seoFor } from '@/lib/seo/page'
 import { buildGraph } from '@/lib/seo/schema'
 import { getTranslitConfig } from '@/lib/translit'
 import type { Script } from '@/lib/script'
-import { localizer } from '@/lib/alphabet'
-import { t } from '@/lib/i18n'
+import { localizer, uiFor } from '@/lib/alphabet'
 import { CategoryChips, JsonLd, NoResults, Pagination, PostRow } from './parts'
 import { Sidebar } from './Sidebar'
 
@@ -18,7 +17,10 @@ export async function BlogListing({ page, script }: { page: number; script: Scri
   const pages = Math.max(1, Math.ceil(total / perPage))
   if (page > pages) notFound()
   const { siteUrl, resolved, url } = await seoFor({ kind: 'blog', path: '/blog/', page, pageTotal: pages, script })
-  const L = localizer(script, getTranslitConfig(base.settings.alphabets), siteUrl)
+  const cfg = getTranslitConfig(base.settings.alphabets)
+  const L = localizer(script, cfg, siteUrl)
+  const ui = uiFor(script, cfg, siteUrl)
+  const { t } = ui
   const settings = L.settings(base.settings)
   const items = L.posts(list.items)
   const { appearance, general } = settings
@@ -42,7 +44,7 @@ export async function BlogListing({ page, script }: { page: number; script: Scri
           {appearance.blogIntro ? <p className="jb-lead">{appearance.blogIntro}</p> : null}
         </header>
 
-        <CategoryChips categories={L.terms(tax.categories)} activeAll allHref="/blog/" />
+        <CategoryChips categories={L.terms(tax.categories)} activeAll allHref="/blog/" ui={ui} />
 
         <div className="jb-layout jb-layout--sidebar">
           <div>
@@ -50,16 +52,16 @@ export async function BlogListing({ page, script }: { page: number; script: Scri
               <>
                 <div className="jb-list">
                   {items.map((p, i) => (
-                    <PostRow key={p.id} post={p} language={general.language} timezone={general.timezone} priority={i === 0} />
+                    <PostRow key={p.id} post={p} language={general.language} timezone={general.timezone} priority={i === 0} ui={ui} />
                   ))}
                 </div>
-                <Pagination current={page} total={pages} base="/blog/" />
+                <Pagination current={page} total={pages} base="/blog/" ui={ui} />
               </>
             ) : (
-              <NoResults />
+              <NoResults ui={ui} />
             )}
           </div>
-          <Sidebar />
+          <Sidebar script={script} />
         </div>
       </div>
     </main>

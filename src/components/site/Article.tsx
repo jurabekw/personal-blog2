@@ -2,7 +2,9 @@ import Link from 'next/link'
 import type { AllSettings } from '@/lib/settings-defaults'
 import type { PostFull, PostSummary } from '@/lib/data/posts'
 import type { Heading } from '@/lib/types'
-import { t } from '@/lib/i18n'
+import { uiFor, type Script, type Ui } from '@/lib/alphabet'
+import { getTranslitConfig } from '@/lib/translit'
+import type { UiStrings } from '@/lib/i18n'
 import { AuthorPhoto, Breadcrumb, FillImage, JsonLd, PostCard, PostMeta, type Crumb } from './parts'
 import { Sidebar, SocialLinks } from './Sidebar'
 import { Enhancer } from './Enhancer'
@@ -20,7 +22,7 @@ function Byline({ settings }: { settings: AllSettings }) {
   )
 }
 
-function Share({ url, title }: { url: string; title: string }) {
+function Share({ url, title, t }: { url: string; title: string; t: UiStrings }) {
   const telegram = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`
   return (
     <section className="jb-share" aria-label={t.share}>
@@ -42,7 +44,7 @@ function Share({ url, title }: { url: string; title: string }) {
   )
 }
 
-function Faq({ post }: { post: PostFull }) {
+function Faq({ post, t }: { post: PostFull; t: UiStrings }) {
   if (!post.faq?.length) return null
   return (
     <section className="jb-faq" aria-labelledby="jb-faq-title">
@@ -69,11 +71,24 @@ interface SingleProps {
   graph: unknown
   related: PostSummary[]
   adjacent: { prev: PostSummary | null; next: PostSummary | null }
+  script: Script
+  siteUrl: string
+}
+
+function pageUi(script: Script, settings: AllSettings, siteUrl: string): Ui {
+  return uiFor(script, getTranslitConfig(settings.alphabets), siteUrl)
+}
+
+/** Copy-button fallbacks for the client enhancer; Latin pages keep the built-in ones (no prop at all). */
+function enhancerProps(ui: Ui) {
+  return ui.script === 'latn' ? {} : { labels: { copy: ui.t.copy, copied: ui.t.copied, copyFailed: ui.t.copyFailed } }
 }
 
 /** single.php */
-export function SinglePost({ post, html, headings, settings, url, crumbs, graph, related, adjacent }: SingleProps) {
+export function SinglePost({ post, html, headings, settings, url, crumbs, graph, related, adjacent, script, siteUrl }: SingleProps) {
   const { language: lang, timezone: tz } = settings.general
+  const ui = pageUi(script, settings, siteUrl)
+  const { t, href } = ui
   return (
     <>
       <JsonLd data={graph} />
@@ -82,7 +97,7 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
       </div>
       <main id="jb-main" className="jb-main">
         <div className="jb-shell">
-          {settings.seo.breadcrumbs.enabled ? <Breadcrumb items={crumbs} separator={settings.seo.breadcrumbs.separator} /> : null}
+          {settings.seo.breadcrumbs.enabled ? <Breadcrumb items={crumbs} separator={settings.seo.breadcrumbs.separator} ui={ui} /> : null}
 
           <div className="jb-layout jb-layout--sidebar">
             <div>
@@ -94,12 +109,12 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
                 ) : null}
 
                 <div className="jb-article__body">
-                  <PostMeta post={post} green language={lang} timezone={tz} />
+                  <PostMeta post={post} green language={lang} timezone={tz} ui={ui} />
                   <h1 className="jb-article__title">{post.title}</h1>
                   {post.hasManualExcerpt ? <p className="jb-lead jb-article__lead">{post.excerpt}</p> : null}
                   <Byline settings={settings} />
                   <div className="jb-content" dangerouslySetInnerHTML={{ __html: html }} />
-                  <Faq post={post} />
+                  <Faq post={post} t={t} />
                   {post.tags.length ? (
                     <div className="jb-tags" aria-label={t.tags}>
                       {post.tags.map((tag) => (
@@ -109,7 +124,7 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
                       ))}
                     </div>
                   ) : null}
-                  <Share url={url} title={post.title} />
+                  <Share url={url} title={post.title} t={t} />
                 </div>
               </article>
 
@@ -119,7 +134,7 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
                   <div className="nav-links">
                     {adjacent.prev ? (
                       <div className="nav-previous">
-                        <Link href={adjacent.prev.path} rel="prev">
+                        <Link href={href(adjacent.prev.path)} rel="prev">
                           <span className="jb-caption">{t.prevPost}</span>
                           <span className="jb-post-nav__title">{adjacent.prev.title}</span>
                         </Link>
@@ -127,7 +142,7 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
                     ) : null}
                     {adjacent.next ? (
                       <div className="nav-next">
-                        <Link href={adjacent.next.path} rel="next">
+                        <Link href={href(adjacent.next.path)} rel="next">
                           <span className="jb-caption">{t.nextPost}</span>
                           <span className="jb-post-nav__title">{adjacent.next.title}</span>
                         </Link>
@@ -144,18 +159,18 @@ export function SinglePost({ post, html, headings, settings, url, crumbs, graph,
                   </h2>
                   <div className="jb-grid jb-grid--3 jb-section__body">
                     {related.map((p) => (
-                      <PostCard key={p.id} post={p} language={lang} timezone={tz} />
+                      <PostCard key={p.id} post={p} language={lang} timezone={tz} ui={ui} />
                     ))}
                   </div>
                 </section>
               ) : null}
             </div>
 
-            <Sidebar headings={headings} />
+            <Sidebar headings={headings} script={script} />
           </div>
         </div>
       </main>
-      <Enhancer />
+      <Enhancer {...enhancerProps(ui)} />
     </>
   )
 }
@@ -165,18 +180,22 @@ interface PageProps {
   html: string
   settings: AllSettings
   graph: unknown
+  script: Script
+  siteUrl: string
 }
 
 /** page.php, page-templates/about.php and page-templates/full-width.php */
-export function SinglePage({ post, html, settings, graph }: PageProps) {
+export function SinglePage({ post, html, settings, graph, script, siteUrl }: PageProps) {
   const a = settings.appearance.author
+  const ui = pageUi(script, settings, siteUrl)
+  const { t } = ui
   if (post.template === 'full-width') {
     return (
       <main id="jb-main" className="jb-main">
         <JsonLd data={graph} />
         <h1 className="screen-reader-text">{post.title}</h1>
         <div className="jb-shell jb-content" style={{ marginTop: 0 }} dangerouslySetInnerHTML={{ __html: html }} />
-        <Enhancer />
+        <Enhancer {...enhancerProps(ui)} />
       </main>
     )
   }
@@ -204,17 +223,17 @@ export function SinglePage({ post, html, settings, graph }: PageProps) {
                         {s.label}
                       </a>
                     ))}
-                    <Link className="jb-btn jb-btn--primary" href="/blog/">
+                    <Link className="jb-btn jb-btn--primary" href={ui.href('/blog/')}>
                       {t.readPosts}
                     </Link>
                   </div>
                 </div>
               </article>
             </div>
-            <Sidebar />
+            <Sidebar script={script} />
           </div>
         </div>
-        <Enhancer />
+        <Enhancer {...enhancerProps(ui)} />
       </main>
     )
   }
@@ -232,11 +251,11 @@ export function SinglePage({ post, html, settings, graph }: PageProps) {
           <div className="jb-article__body">
             <h1 className="jb-article__title">{post.title}</h1>
             <div className="jb-content" dangerouslySetInnerHTML={{ __html: html }} />
-            <Faq post={post} />
+            <Faq post={post} t={t} />
           </div>
         </article>
       </div>
-      <Enhancer />
+      <Enhancer {...enhancerProps(ui)} />
     </main>
   )
 }

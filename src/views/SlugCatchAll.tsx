@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import { findRedirect } from '@/lib/data/redirects'
 import { getPublishedBySlug } from '@/lib/data/posts'
-import { scriptHref, type Script } from '@/lib/alphabet'
+import { redirectHref, scriptHref, type Script } from '@/lib/alphabet'
 
 type Props = { params: Promise<{ slug: string; rest: string[] }> }
 
@@ -14,7 +14,7 @@ export async function renderSlugCatchAll(script: Script, { params }: Props): Pro
   const path = `/${[slug, ...rest].map((s) => decodeURIComponent(s)).join('/')}`
   const match = await findRedirect(path)
   if (match && match.statusCode !== 410 && match.target) {
-    const target = scriptHref(script, match.target)
+    const target = await redirectHref(script, match.target)
     if (match.statusCode === 301 || match.statusCode === 308) permanentRedirect(target)
     redirect(target)
   }

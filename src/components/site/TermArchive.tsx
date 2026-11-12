@@ -7,8 +7,7 @@ import { metadataFor, seoFor } from '@/lib/seo/page'
 import { buildGraph } from '@/lib/seo/schema'
 import { getTranslitConfig } from '@/lib/translit'
 import type { Script } from '@/lib/script'
-import { localizer, scriptHref } from '@/lib/alphabet'
-import { t } from '@/lib/i18n'
+import { localizer, redirectHref, scriptHref, uiFor } from '@/lib/alphabet'
 import { Breadcrumb, JsonLd, NoResults, Pagination, PostRow, type Crumb } from './parts'
 import { Sidebar } from './Sidebar'
 
@@ -70,7 +69,7 @@ export async function TermArchive({ taxonomy, segments, script }: { taxonomy: Ta
   if (!source) {
     const match = await findRedirect(requested)
     if (match && match.target && match.statusCode !== 410) {
-      const target = scriptHref(script, match.target)
+      const target = await redirectHref(script, match.target)
       if (match.statusCode === 301 || match.statusCode === 308) permanentRedirect(target)
       redirect(target)
     }
@@ -94,7 +93,10 @@ export async function TermArchive({ taxonomy, segments, script }: { taxonomy: Ta
     tagId: taxonomy === 'tag' ? source.id : undefined,
   })
   const { siteUrl, resolved, url } = await seoFor({ kind: taxonomy, path: source.path, term: source, page, pageTotal: pages, script })
-  const L = localizer(script, getTranslitConfig(rawSettings.alphabets), siteUrl)
+  const cfg = getTranslitConfig(rawSettings.alphabets)
+  const L = localizer(script, cfg, siteUrl)
+  const ui = uiFor(script, cfg, siteUrl)
+  const { t } = ui
   const settings = L.settings(rawSettings)
   const term = L.term(source)
   const items = L.posts(list.items)
@@ -121,7 +123,7 @@ export async function TermArchive({ taxonomy, segments, script }: { taxonomy: Ta
     <main className="jb-main" id="jb-main">
       <JsonLd data={buildGraph({ settings, siteUrl, seo: resolved, url, pageType: 'CollectionPage', crumbs: graphCrumbs, listing: items })} />
       <div className="jb-shell">
-        {seo.breadcrumbs.enabled ? <Breadcrumb items={crumbs} separator={seo.breadcrumbs.separator} /> : null}
+        {seo.breadcrumbs.enabled ? <Breadcrumb items={crumbs} separator={seo.breadcrumbs.separator} ui={ui} /> : null}
         <header className="jb-page-header">
           <h1>{page > 1 ? `${term.name} — ${t.pageOf(page, pages)}` : term.name}</h1>
           {term.description ? <div className="jb-lead">{term.description}</div> : null}
@@ -134,16 +136,16 @@ export async function TermArchive({ taxonomy, segments, script }: { taxonomy: Ta
               <>
                 <div className="jb-list">
                   {items.map((p, i) => (
-                    <PostRow key={p.id} post={p} language={general.language} timezone={general.timezone} priority={i === 0} />
+                    <PostRow key={p.id} post={p} language={general.language} timezone={general.timezone} priority={i === 0} ui={ui} />
                   ))}
                 </div>
-                <Pagination current={page} total={pages} base={term.path} />
+                <Pagination current={page} total={pages} base={term.path} ui={ui} />
               </>
             ) : (
-              <NoResults />
+              <NoResults ui={ui} />
             )}
           </div>
-          <Sidebar />
+          <Sidebar script={script} />
         </div>
       </div>
     </main>

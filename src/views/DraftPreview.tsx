@@ -43,7 +43,7 @@ export async function renderDraftPreview({ params, searchParams }: Props) {
     }
   }
 
-  const { settings, url } = await seoFor({ kind: post.type, path: post.path, post })
+  const { settings, url, siteUrl } = await seoFor({ kind: post.type, path: post.path, post })
   const rendered = renderContent(post.content, { media: await getMediaInfoForHtml(post.content), tocTitle: settings.appearance.sidebar.toc.title })
   post.faq = post.faq.map((q) => ({ question: q.question, answer: sanitizeContent(q.answer) }))
   const banner = (
@@ -58,7 +58,7 @@ export async function renderDraftPreview({ params, searchParams }: Props) {
     return (
       <>
         {banner}
-        <SinglePage post={post} html={rendered.html} settings={settings} graph={{}} />
+        <SinglePage post={post} html={rendered.html} settings={settings} graph={{}} script="latn" siteUrl={siteUrl} />
       </>
     )
   }
@@ -76,6 +76,8 @@ export async function renderDraftPreview({ params, searchParams }: Props) {
         graph={{}}
         related={related}
         adjacent={{ prev: null, next: null }}
+        script="latn"
+        siteUrl={siteUrl}
       />
     </>
   )
