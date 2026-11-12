@@ -1,6 +1,9 @@
 import type { TranslitConfig } from './types';
 
-/** Current-Latin stems whose Cyrillic spelling can't be derived by rules (soft sign, ц). */
+/**
+ * Current-Latin stems whose Cyrillic spelling can't be derived by rules (soft sign, ъ, ц).
+ * -tsiya / -tsion (investitsiya, prezentatsiya) are handled by the rules and need no entry.
+ */
 export const DEFAULT_EXCEPTIONS: Record<string, string> = {
   yanvar: 'январь',
   fevral: 'февраль',
@@ -17,10 +20,18 @@ export const DEFAULT_EXCEPTIONS: Record<string, string> = {
   litsenziya: 'лицензия',
   funksiya: 'функция',
   stansiya: 'станция',
-  investitsiya: 'инвестиция',
   konferensiya: 'конференция',
-  prezentatsiya: 'презентация',
   sotsial: 'социал',
+  obyekt: 'объект',
+  subyekt: 'субъект',
+  sikl: 'цикл',
+  protsess: 'процесс',
+  retsept: 'рецепт',
+  ofitsial: 'официал',
+  litsey: 'лицей',
+  konsepsiya: 'концепция',
+  reaksiya: 'реакция',
+  tendensiya: 'тенденция',
 };
 
 /** Words that always stay in Latin, even on Cyrillic pages. */

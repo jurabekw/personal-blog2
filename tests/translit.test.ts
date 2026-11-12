@@ -45,7 +45,9 @@ test('exceptions: exact word and longest prefix', () => {
 test('keeps protected words and acronyms', () => {
   const c = { ...cfg, protectedWords: ['Google', 'Ads', 'ChatGPT', 'Chrome'] };
   assert.equal(toCyrillic('Google Ads kampaniyasi', c), 'Google Ads кампанияси');
-  assert.equal(toCyrillic('ChatGPT bilan SEO va GA4', c), 'ChatGPT билан SEO ва GA4');
+  // SEO is kept by the default protected list; GA4 by its digit.
+  assert.equal(toCyrillic('ChatGPT bilan SEO va GA4', cfg), 'ChatGPT билан SEO ва GA4');
+  assert.equal(toCyrillic('ChatGPT bilan GA4', c), 'ChatGPT билан GA4');
   assert.equal(toCyrillic('Facebook sahifa', cfg), 'Facebook саҳифа');
   assert.equal(toNewLatin('Chrome brauzeri', c), 'Chrome brauzeri');
 });
@@ -138,6 +140,145 @@ test('transliterateHtml new latin, comments and nested skip tags', () => {
 })
 
 test('transliterateHtml handles entities, single-quoted attrs and data-title', () => {
+  // Apostrophe entities are decoded before transliterating (quotes around words stay quotes).
   assert.equal(transliterateHtml("<p>shahar&nbsp;choy &#39;x&#39;</p><img alt='choy' data-alt=\"choy\">", 'cyrl', cfg),
-    "<p>шаҳар&nbsp;чой &#39;х&#39;</p><img alt='чой' data-alt=\"choy\">")
+    "<p>шаҳар&nbsp;чой 'х'</p><img alt='чой' data-alt=\"choy\">")
+})
+
+// ---- Final fix wave ----
+
+test('shortcodes: jb_ tag and attribute names stay, only title="…" is transliterated', () => {
+  const html = '<p>[jb_article_sections]</p><p>[jb_copy_box title="Prompt"]Shahar haqida[/jb_copy_box]</p>' +
+    "<p>[jb_article_sections title='Mundarija']</p><p>[jb_copy_box title=“Choy”]x[/jb_copy_box]</p>"
+  assert.equal(transliterateHtml(html, 'cyrl', cfg),
+    '<p>[jb_article_sections]</p><p>[jb_copy_box title="Промпт"]Шаҳар ҳақида[/jb_copy_box]</p>' +
+    "<p>[jb_article_sections title='Мундарижа']</p><p>[jb_copy_box title=“Чой”]х[/jb_copy_box]</p>")
+  assert.equal(transliterateHtml('<p>[jb_copy_box title="Shahar"]choy[/jb_copy_box]</p>', 'yangi', cfg),
+    '<p>[jb_copy_box title="Şahar"]çoy[/jb_copy_box]</p>')
+  // Encoded quotes around the title value.
+  assert.equal(transliterateHtml('<p>[jb_copy_box title=&quot;Shahar&quot;]x[/jb_copy_box]</p>', 'cyrl', cfg),
+    '<p>[jb_copy_box title=&quot;Шаҳар&quot;]х[/jb_copy_box]</p>')
+  // Ordinary square brackets are still text.
+  assert.equal(transliterateHtml('<p>[shahar]</p>', 'cyrl', cfg), '<p>[шаҳар]</p>')
+})
+
+test('apostrophe entities are decoded before transliterating', () => {
+  for (const e of ['&#39;', '&#x27;', '&apos;', '&#039;']) {
+    assert.equal(transliterateHtml(`<p>O${e}zbek</p>`, 'cyrl', cfg), '<p>Ўзбек</p>', e)
+  }
+  for (const e of ['&rsquo;', '&#8217;', '&#x2019;']) {
+    assert.equal(transliterateHtml(`<p>O${e}zbek</p>`, 'cyrl', cfg), '<p>Ўзбек</p>', e)
+    assert.equal(transliterateHtml(`<p>bog${e}</p>`, 'yangi', cfg), '<p>boğ</p>', e)
+  }
+  assert.equal(transliterateHtml('<img alt="O&#39;zbek">', 'cyrl', cfg), '<img alt="Ўзбек">')
+  // A decoded apostrophe never closes a single-quoted attribute.
+  assert.equal(transliterateHtml("<img alt='ma&#39;no'>", 'cyrl', cfg), "<img alt='маъно'>")
+  assert.equal(transliterateHtml("<img alt='&#39;x&#39;'>", 'cyrl', cfg), "<img alt='&#39;х&#39;'>")
+})
+
+test('brand names keep their stem when an Uzbek suffix is attached', () => {
+  assert.equal(toCyrillic("Google'da", cfg), "Google'да")
+  assert.equal(toCyrillic('Googleda', cfg), 'Googleда')
+  assert.equal(toCyrillic('Instagram’da', cfg), 'Instagram’да')
+  assert.equal(toCyrillic("Instagram'da", cfg), "Instagram'да")
+  assert.equal(toCyrillic("Meta'ning", cfg), "Meta'нинг")
+  assert.equal(toCyrillic('Yandexda', cfg), 'Yandexда')
+  assert.equal(toCyrillic('Yoastda', cfg), 'Yoastда')
+  assert.equal(toCyrillic('Telegram’da ulashish', cfg), 'Telegram’да улашиш')
+  assert.equal(toCyrillic("Googlelarda va Google'ga", cfg), "Googleларда ва Google'га")
+  assert.equal(toCyrillic("ChatGPT'ning", cfg), "ChatGPT'нинг")
+  // New Latin: the stem and the typed apostrophe stay.
+  assert.equal(toNewLatin("Google'da va Googleda", cfg), "Google'da va Googleda")
+  assert.equal(toNewLatin("Telegram'dagi chat", cfg), "Telegram'dagi çat")
+  // Without an apostrophe only known suffixes count.
+  assert.equal(toCyrillic('Metabolizm', cfg), 'Метаболизм')
+  assert.equal(toCyrillic('Notionda', cfg), 'Notionда')
+  // A non-brand word is unaffected.
+  assert.equal(toCyrillic('shaharda', cfg), 'шаҳарда')
+  assert.equal(toCyrillic('itlar itga', cfg), 'итлар итга')
+  assert.equal(toCyrillic('ITlar', cfg), 'ITлар')
+})
+
+test('UI string Telegram’da ulashish keeps Telegram in Latin', () => {
+  assert.equal(transliterateText('Telegram’da ulashish', 'cyrl', cfg), 'Telegram’да улашиш')
+})
+
+test('URLs, e-mails, @handles, domains and dotted names pass through', () => {
+  const cases = [
+    'https://www.jurabek.blog/blog/',
+    'http://example.uz/shahar?a=1#choy',
+    'www.jurabek.blog/shahar',
+    'info@jurabek.blog',
+    'linkedin.com/in/jurabek',
+    'Next.js',
+    'node.js',
+    '@jurabeekkd',
+    'jurabek.blog',
+  ]
+  for (const c of cases) {
+    assert.equal(toCyrillic(`Manzil: ${c} shahar`, cfg), `Манзил: ${c} шаҳар`, c)
+    assert.equal(toNewLatin(`Manzil: ${c} shahar`, cfg), `Manzil: ${c} şahar`, c)
+  }
+  // Trailing sentence punctuation is not part of the URL.
+  assert.equal(toCyrillic('Sayt: https://www.jurabek.blog/blog/. Keyin choy', cfg), 'Сайт: https://www.jurabek.blog/blog/. Кейин чой')
+  assert.equal(toCyrillic('(info@jurabek.blog) va @jurabeekkd.', cfg), '(info@jurabek.blog) ва @jurabeekkd.')
+  assert.equal(toCyrillic('Next.js’da sayt', cfg), 'Next.js’да сайт')
+  // Normal sentences still transliterate both words.
+  assert.equal(toCyrillic('Bu yaxshi. Keyin', cfg), 'Бу яхши. Кейин')
+  assert.equal(toCyrillic('Bu yaxshi.Keyin', cfg), 'Бу яхши.Кейин')
+  assert.equal(toCyrillic('va h.k. shahar', cfg), 'ва ҳ.к. шаҳар')
+  assert.equal(toCyrillic('3.5 soat', cfg), '3.5 соат')
+  assert.equal(toCyrillic('1.5-versiya', cfg), '1.5-версия')
+})
+
+test('-tsiya / -tsion become -ция / -цион in Cyrillic; bare ts stays тс', () => {
+  const words: [string, string][] = [
+    ['integratsiya', 'интеграция'],
+    ['integratsiyasi', 'интеграцияси'],
+    ['integratsiyalash', 'интеграциялаш'],
+    ['navigatsiya', 'навигация'],
+    ['navigatsiyasi', 'навигацияси'],
+    ['investitsion', 'инвестицион'],
+    ['traditsion', 'традицион'],
+    ['Integratsiya', 'Интеграция'],
+    ['aytsa', 'айтса'],
+    ['ketsa', 'кетса'],
+    ["o'tsangiz", 'ўтсангиз'],
+  ]
+  for (const [lat, cyr] of words) assert.equal(toCyrillic(lat, cfg), cyr, lat)
+  assert.equal(toNewLatin('integratsiya', cfg), 'integratsiya')
+  assert.equal(normalizeForSearch('интеграция'), 'integratsiya')
+  assert.equal(normalizeForSearch('инвестицион'), 'investitsion')
+})
+
+test('dictionary: loanwords with ъ and ц', () => {
+  const words: [string, string][] = [
+    ['obyekt', 'объект'], ['obyektlar', 'объектлар'], ['subyekt', 'субъект'], ['sikl', 'цикл'],
+    ['protsess', 'процесс'], ['protsessi', 'процесси'], ['retsept', 'рецепт'], ['ofitsial', 'официал'],
+    ['litsey', 'лицей'], ['konsepsiya', 'концепция'], ['reaksiya', 'реакция'], ['tendensiya', 'тенденция'],
+    ['investitsiya', 'инвестиция'], ['prezentatsiya', 'презентация'],
+  ]
+  for (const [lat, cyr] of words) assert.equal(toCyrillic(lat, cfg), cyr, lat)
+})
+
+test('short ALL-CAPS Uzbek words are transliterated; real acronyms stay Latin', () => {
+  assert.equal(toCyrillic('Bu JUDA muhim va BEPUL. YANGI kurs!', cfg), 'Бу ЖУДА муҳим ва БЕПУЛ. ЯНГИ курс!')
+  assert.equal(toNewLatin('SHAHAR va CHOY', cfg), 'ŞAHAR va ÇOY')
+  const acronyms = ['SEO', 'GEO', 'AEO', 'UX', 'UI', 'CRO', 'KPI', 'ROI', 'CRM', 'CMS', 'API', 'AI', 'PR', 'HTML', 'URL', 'MBA', 'PDF', 'IT', 'SaaS', 'GA4', 'B2B', 'CTR', 'CPC', 'CPA', 'CPM', 'ROAS', 'SMM']
+  for (const a of acronyms) assert.equal(toCyrillic(`${a} kerak`, cfg), `${a} керак`, a)
+  // No vowel / digit / foreign letter → acronym even if not in the list.
+  assert.equal(toCyrillic('BMT va TV hamda X5 va WWF', cfg), 'BMT ва TV ҳамда X5 ва WWF')
+  // Words with vowels that are not protected are Uzbek words.
+  assert.equal(toCyrillic('OLMA', cfg), 'ОЛМА')
+})
+
+test('opt-out: lang="en", translate="no" and class notranslate keep their contents', () => {
+  const html = '<p>shahar</p><blockquote lang="en"><p>Share this with <em>your</em> team</p></blockquote><p>choy</p>' +
+    '<p lang="en-US" title="Title">Hello</p><p translate="no">sharh</p><div class="x notranslate"><div>shahar</div><img alt="shahar"></div><p>shahar</p>' +
+    '<p lang="uz">shahar</p><p data-lang="en">shahar</p><img lang="en" alt="Shop"><p>choy</p>'
+  assert.equal(transliterateHtml(html, 'cyrl', cfg),
+    '<p>шаҳар</p><blockquote lang="en"><p>Share this with <em>your</em> team</p></blockquote><p>чой</p>' +
+    '<p lang="en-US" title="Title">Hello</p><p translate="no">sharh</p><div class="x notranslate"><div>shahar</div><img alt="shahar"></div><p>шаҳар</p>' +
+    '<p lang="uz">шаҳар</p><p data-lang="en">шаҳар</p><img lang="en" alt="Shop"><p>чой</p>')
+  assert.equal(transliterateHtml('<em lang="en">Shopping</em> shahar', 'yangi', cfg), '<em lang="en">Shopping</em> şahar')
 })

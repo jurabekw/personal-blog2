@@ -30,20 +30,14 @@ function isAllCaps(word: string): boolean {
   return hasLetters(word) && word === word.toUpperCase() && word !== word.toLowerCase();
 }
 
-/** Mostly-uppercase input (e.g. an ALL CAPS heading): short caps words are words, not acronyms. */
-function isCapsText(text: string): boolean {
-  const letters = text.match(/\p{L}/gu) || [];
-  if (letters.length === 0) return false;
-  const upper = letters.filter((l) => l !== l.toLowerCase() && l === l.toUpperCase()).length;
-  return upper / letters.length > 0.6;
-}
-
-function shouldKeep(word: string, cfg: TranslitConfig, capsText: boolean): boolean {
+function shouldKeep(word: string, cfg: TranslitConfig): boolean {
   const lower = word.toLowerCase();
   if (cfg.protectedWords.some((p) => p.toLowerCase() === lower)) return true;
-  if (/\p{N}/u.test(word) && /\p{L}/u.test(word) && !/^\p{N}+$/u.test(word) && isAllCaps(word)) return true;
-  if (!capsText && isAllCaps(word) && word.replace(APOS_RE, '').length >= 2 && word.replace(APOS_RE, '').length <= 5) {
-    return true;
+  if (isAllCaps(word)) {
+    // ALL-CAPS: an acronym only with a digit (GA4, B2B) or without any vowel (HTML, PDF, BMT);
+    // JUDA, BEPUL, YANGI are Uzbek words. Protected acronyms (SEO, KPI…) are kept above.
+    if (/\p{N}/u.test(word)) return true;
+    if (!/[aeiou]/i.test(word)) return true;
   }
   // Internal capital letter (iPhone, YouTube, LinkedIn) → foreign brand.
   if (/\p{Ll}/u.test(word) && /.\p{Lu}/u.test(word)) return true;
@@ -70,6 +64,12 @@ function cyrRules(s: string, prev = ''): string {
     const n = s[i + 1];
     if ((c === 'o' || c === 'g') && n === "'") {
       out += c === 'o' ? 'ў' : 'ғ';
+      i += 2;
+      continue;
+    }
+    // -tsiya / -tsion loanwords: integratsiya → интеграция, investitsion → инвестицион (not bare ts: aytsa → айтса).
+    if (c === 't' && n === 's' && s[i + 2] === 'i' && (s.startsWith('ya', i + 3) || s.startsWith('on', i + 3))) {
+      out += 'ц';
       i += 2;
       continue;
     }
@@ -154,18 +154,98 @@ function wordToNewLatin(word: string): string {
   return out;
 }
 
-function mapWords(text: string, cfg: TranslitConfig, fn: (word: string) => string): string {
+/**
+ * Spans that are never transliterated: URLs, e-mail addresses, @handles and dotted names
+ * (jurabek.blog, linkedin.com/in/…, Next.js). A dotted name needs a last part of 2+ characters
+ * starting with a lowercase letter, so "yaxshi. Keyin", "yaxshi.Keyin", "h.k." and "1.5-versiya"
+ * are still text (a missing space before a lowercase word, "tugadi.keyin", is taken as a name).
+ */
+const PROTECT_RE = new RegExp(
+  [
+    String.raw`(?<![\p{L}\p{N}])(?:https?:\/\/|www\.)[^\s<>"'«»“”‘’]+`,
+    String.raw`(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+`,
+    String.raw`(?<![\p{L}\p{N}_@])@[A-Za-z0-9_](?:[A-Za-z0-9_.]*[A-Za-z0-9_])?`,
+    String.raw`(?<![\p{L}\p{N}'‘’ʻʼ\x60.@-])[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)+(?:\/[^\s<>"'«»“”‘’]*)?`,
+  ].join('|'),
+  'gu',
+);
+
+function protectedSpan(match: string): string {
+  // Sentence punctuation after a URL/name is not part of it; keep a ")" only when it closes a "(" inside.
+  let span = match.replace(/[.,;:!?]+$/u, '');
+  while (span.endsWith(')') && (span.match(/\(/g) || []).length < (span.match(/\)/g) || []).length) {
+    span = span.slice(0, -1).replace(/[.,;:!?]+$/u, '');
+  }
+  if (/^(?:https?:\/\/|www\.)/i.test(span) || span.includes('@')) return span;
+  const host = span.split('/')[0];
+  const last = host.slice(host.lastIndexOf('.') + 1);
+  return last.length >= 2 && /^\p{Ll}/u.test(last) ? span : '';
+}
+
+/** Uzbek suffixes accepted after a protected word without an apostrophe (Googleda, Yandexdan). */
+const SUFFIXES = new Set([
+  'da', 'dan', 'ga', 'ka', 'qa', 'ni', 'ning', 'niki', 'dagi', 'lar', 'lari', 'larga', 'larda', 'lardan',
+  'larni', 'larning', 'cha', 'chi', 'day', 'dek', 'siz', 'li', 'lik',
+]);
+
+/**
+ * Protected word + Uzbek suffix (Google'da, Googleda, Instagram’da, Meta'ning): the stem stays as
+ * typed, only the suffix is transliterated. With an apostrophe any letters count as a suffix;
+ * without one the suffix must be a known one and the stem must be typed like the protected word
+ * (so "itlar" is not IT + lar).
+ */
+function splitProtected(word: string, cfg: TranslitConfig): [string, string, string] | null {
+  const lower = word.toLowerCase();
+  let best: [string, string, string] | null = null;
+  for (const p of cfg.protectedWords) {
+    if (p.length >= word.length || (best && p.length <= best[0].length)) continue;
+    if (!lower.startsWith(p.toLowerCase())) continue;
+    const m = /^(['‘’ʻʼ`]?)(\p{L}+)$/u.exec(word.slice(p.length));
+    if (!m) continue;
+    const stem = word.slice(0, p.length);
+    if (!m[1] && (stem !== p || !SUFFIXES.has(m[2].toLowerCase()))) continue;
+    best = [stem, m[1], m[2]];
+  }
+  return best;
+}
+
+type WordFn = (word: string) => string;
+
+function mapPlain(text: string, cfg: TranslitConfig, fn: WordFn, suffixFn: (suffix: string, stem: string) => string): string {
+  return text.replace(WORD_RE, (word) => {
+    const split = splitProtected(word, cfg);
+    if (split) return split[0] + split[1] + suffixFn(split[2], split[0]);
+    return shouldKeep(word, cfg) ? word : fn(word);
+  });
+}
+
+function mapWords(text: string, cfg: TranslitConfig, fn: WordFn, suffixFn: (suffix: string, stem: string) => string): string {
   if (!text) return text;
-  const capsText = isCapsText(text);
-  return text.replace(WORD_RE, (word) => (shouldKeep(word, cfg, capsText) ? word : fn(word)));
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(PROTECT_RE)) {
+    const span = protectedSpan(m[0]);
+    if (!span) continue;
+    const at = m.index ?? 0;
+    if (at < last) continue;
+    out += mapPlain(text.slice(last, at), cfg, fn, suffixFn) + span;
+    last = at + span.length;
+  }
+  return out + mapPlain(text.slice(last), cfg, fn, suffixFn);
+}
+
+/** A suffix after a Latin stem, transliterated as the continuation of a word (e → е after a consonant). */
+function suffixToCyrillic(suffix: string, stem: string): string {
+  const prev = /[aeiouy]$/i.test(stem) ? 'а' : 'б';
+  return applyCase(suffix, cyrRules(normApos(suffix).toLowerCase(), prev));
 }
 
 export function toCyrillic(text: string, cfg: TranslitConfig): string {
-  return mapWords(text, cfg, (w) => wordToCyrillic(w, cfg));
+  return mapWords(text, cfg, (w) => wordToCyrillic(w, cfg), suffixToCyrillic);
 }
 
 export function toNewLatin(text: string, cfg: TranslitConfig): string {
-  return mapWords(text, cfg, wordToNewLatin);
+  return mapWords(text, cfg, wordToNewLatin, (suffix) => wordToNewLatin(suffix));
 }
 
 export function transliterateText(text: string, script: Script, cfg: TranslitConfig): string {
