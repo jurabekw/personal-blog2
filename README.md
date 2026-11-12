@@ -77,6 +77,33 @@ src/lib/import/          WordPress REST + WXR importers
 src/styles/theme.css     the WordPress theme's style.css, unchanged
 ```
 
+## Alphabet versions (O'zbek · Ўзбек · Özbek)
+
+Every post and page exists in three alphabets, generated automatically from the Latin source:
+
+| Alphabet | URL | Notes |
+| --- | --- | --- |
+| Current Latin | `/slug/` | Canonical source, `uz` |
+| Cyrillic | `/kirill/slug/` | `uz-Cyrl`, linked with hreflang |
+| New (2026) Latin | `/yangi/slug/` | Canonical to itself, no hreflang; indexing can be switched off |
+
+- **Fixing wrong words:** Admin → Settings → Alifbolar. "Exceptions" map a Latin word to its correct Cyrillic form; "Protected words" stay in Latin. Saving refreshes the site.
+- **New-Latin indexing switch:** the same screen. Off = `/yangi/` pages get `noindex` and leave the sitemap.
+- **Golden-set export** (sentences for reviewing the Cyrillic column; needs `DATABASE_URL`, read from `.env.local`):
+
+  ```bash
+  npm run golden-set -- 300 > golden.csv   # header: post_slug,latn,cyrl,yangi (UTF-8 with BOM, opens in Excel)
+  ```
+
+  Add fixes in Alifbolar, re-run, and check the changed rows.
+
+**Launch checklist**
+
+1. Google Search Console: submit `sitemap_index.xml`; run URL inspection on one URL per alphabet.
+2. Yandex Webmaster: add the sitemaps; run "Check page" on one URL per alphabet.
+3. GA4: register the `alphabet` custom dimension (event-scoped).
+4. Review after 4 weeks: indexed pages per sitemap, queries landing on `/kirill/` and `/yangi/`, duplicate-content warnings on `/yangi/`.
+
 ## Notes
 
 - Scheduled posts go live within an hour of their time (pages refresh hourly; any save refreshes immediately).

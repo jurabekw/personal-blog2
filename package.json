@@ -10,6 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
+    "golden-set": "tsx --conditions=react-server --tsconfig tsconfig.json scripts/golden-set.ts",
     "test": "tsx --conditions=react-server --tsconfig tsconfig.json --test tests/*.test.ts"
   },
   "engines": {
