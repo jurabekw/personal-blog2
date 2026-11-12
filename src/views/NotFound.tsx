@@ -3,13 +3,14 @@ import type { Metadata } from 'next'
 import { replaceVars } from '@/lib/seo/templates'
 import { getSettings } from '@/lib/data/settings'
 import { alphabetContext, uiFor, type Script, type Ui } from '@/lib/alphabet'
-import { DEFAULT_TRANSLIT_CONFIG } from '@/lib/translit'
+import { DEFAULT_TRANSLIT_CONFIG, getTranslitConfig, transliterateText } from '@/lib/translit'
 
-export async function metadataNotFound(_script: Script): Promise<Metadata> {
-  // SEO strings stay as resolved today; per-alphabet SEO is handled separately.
+export async function metadataNotFound(script: Script): Promise<Metadata> {
   const s = await getSettings()
+  const title = replaceVars(s.seo.titles.notFound, { sitename: s.general.siteName, sep: s.seo.separator })
   return {
-    title: { absolute: replaceVars(s.seo.titles.notFound, { sitename: s.general.siteName, sep: s.seo.separator }) },
+    // Resolved in Latin, then transliterated for the variant trees (Latin output unchanged).
+    title: { absolute: script === 'latn' ? title : transliterateText(title, script, getTranslitConfig(s.alphabets)) },
     robots: { index: false, follow: true },
   }
 }

@@ -4,7 +4,7 @@ import { SiteChrome } from '@/components/site/SiteChrome'
 import { HTML_LANG } from '@/lib/script'
 
 export function generateMetadata(): Promise<Metadata> {
-  return rootMetadata()
+  return rootMetadata('cyrl')
 }
 
 export const viewport: Viewport = rootViewport

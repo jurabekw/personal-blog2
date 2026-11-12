@@ -124,6 +124,13 @@ export function localizeSettings(s: AllSettings, script: Script, cfg: TranslitCo
     seo: {
       ...s.seo,
       breadcrumbs: mapFields(s.seo.breadcrumbs, ['homeLabel'], script, cfg),
+      // Displayed in JSON-LD (Person / Organization); URLs and image paths stay as they are.
+      siteRepresentation: mapFields(
+        s.seo.siteRepresentation,
+        ['personName', 'personDescription', 'personJobTitle', 'orgName', 'orgAlternateName'],
+        script,
+        cfg,
+      ),
     },
   }
 }

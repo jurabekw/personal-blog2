@@ -2,6 +2,7 @@ import 'server-only'
 import type { AllSettings } from '@/lib/settings-defaults'
 import type { PostFull, PostSummary } from '@/lib/data/posts'
 import { stripTags } from '@/lib/content/text'
+import { HTML_LANG, SCRIPT_PREFIX, withScript, type Script } from '@/lib/script'
 import { abs, type ResolvedSeo } from './resolve'
 
 export interface Crumb {
@@ -19,13 +20,28 @@ function sameAs(settings: AllSettings): string[] {
   return [...new Set(list.filter((u) => /^https?:\/\//.test(u || '')))]
 }
 
+/**
+ * URL helpers for a graph in one alphabet. For latn every value is exactly what it was before.
+ * Document nodes (WebSite, WebPage, Article, breadcrumb, images, FAQ) use the alphabet URL;
+ * entity ids (Person, Organization, logo) stay site-wide so all versions describe one entity.
+ */
+function urlsFor(script: Script, siteUrl: string) {
+  return {
+    /** Home of this alphabet, with trailing slash. */
+    home: `${siteUrl}${SCRIPT_PREFIX[script]}/`,
+    /** Absolute URL of a site link in this alphabet. */
+    link: (href: string) => (script === 'latn' ? abs(siteUrl, href) : abs(siteUrl, withScript(script, href, siteUrl))),
+  }
+}
+
 /** Site-wide nodes: WebSite + Person (or Organization). */
-function siteNodes(settings: AllSettings, siteUrl: string): { nodes: Node[]; publisherId: string; personId: string } {
+function siteNodes(settings: AllSettings, siteUrl: string, script: Script, lang: string): { nodes: Node[]; publisherId: string; personId: string } {
   const rep = settings.seo.siteRepresentation
   const author = settings.appearance.author
+  const u = urlsFor(script, siteUrl)
   const personId = `${siteUrl}/#/schema/person/main`
   const orgId = `${siteUrl}/#organization`
-  const websiteId = `${siteUrl}/#website`
+  const websiteId = `${u.home}#website`
   const photo = abs(siteUrl, rep.personImage || author.photoUrl || '/images/profile.png')
 
   const person: Node = {
@@ -35,7 +51,7 @@ function siteNodes(settings: AllSettings, siteUrl: string): { nodes: Node[]; pub
     description: rep.personDescription || author.bio || undefined,
     jobTitle: rep.personJobTitle || author.role || undefined,
     image: { '@type': 'ImageObject', '@id': `${siteUrl}/#/schema/person/image`, url: photo, contentUrl: photo, caption: rep.personName || author.name },
-    url: author.aboutUrl ? abs(siteUrl, author.aboutUrl) : siteUrl + '/',
+    url: author.aboutUrl ? u.link(author.aboutUrl) : u.home,
     sameAs: sameAs(settings),
   }
   const nodes: Node[] = []
@@ -47,7 +63,7 @@ function siteNodes(settings: AllSettings, siteUrl: string): { nodes: Node[]; pub
       '@id': orgId,
       name: rep.orgName,
       alternateName: rep.orgAlternateName || undefined,
-      url: siteUrl + '/',
+      url: u.home,
       logo: logo ? { '@type': 'ImageObject', '@id': `${siteUrl}/#/schema/logo/image/`, url: logo, contentUrl: logo, caption: rep.orgName } : undefined,
       image: logo ? { '@id': `${siteUrl}/#/schema/logo/image/` } : undefined,
       sameAs: sameAs(settings),
@@ -58,15 +74,15 @@ function siteNodes(settings: AllSettings, siteUrl: string): { nodes: Node[]; pub
   nodes.unshift({
     '@type': 'WebSite',
     '@id': websiteId,
-    url: siteUrl + '/',
+    url: u.home,
     name: settings.general.siteName,
     description: settings.general.tagline,
     publisher: { '@id': publisherId },
-    inLanguage: settings.general.language,
+    inLanguage: lang,
     potentialAction: [
       {
         '@type': 'SearchAction',
-        target: { '@type': 'EntryPoint', urlTemplate: `${siteUrl}/search/?q={search_term_string}` },
+        target: { '@type': 'EntryPoint', urlTemplate: `${u.link('/search/')}?q={search_term_string}` },
         'query-input': { '@type': 'PropertyValueSpecification', valueRequired: true, valueName: 'search_term_string' },
       },
     ],
@@ -74,12 +90,12 @@ function siteNodes(settings: AllSettings, siteUrl: string): { nodes: Node[]; pub
   return { nodes, publisherId, personId }
 }
 
-function breadcrumbNode(url: string, crumbs: Crumb[], siteUrl: string, current: string): Node {
+function breadcrumbNode(url: string, crumbs: Crumb[], link: (href: string) => string, current: string): Node {
   const items = crumbs.map((c, i) => ({
     '@type': 'ListItem',
     position: i + 1,
     name: c.label,
-    ...(c.href ? { item: abs(siteUrl, c.href) } : {}),
+    ...(c.href ? { item: link(c.href) } : {}),
   }))
   if (items.length && !crumbs[crumbs.length - 1].href) items[items.length - 1].name = current || items[items.length - 1].name
   return { '@type': 'BreadcrumbList', '@id': `${url}#breadcrumb`, itemListElement: items }
@@ -96,9 +112,12 @@ export function buildGraph(opts: {
   listing?: PostSummary[]
 }): Node {
   const { settings, siteUrl, seo, url, crumbs, post } = opts
-  const site = siteNodes(settings, siteUrl)
+  const script: Script = seo.script ?? 'latn'
+  // Latin keeps the configured content language ("uz") exactly as before; variants name the script.
+  const lang = script === 'latn' ? settings.general.language : HTML_LANG[script]
+  const u = urlsFor(script, siteUrl)
+  const site = siteNodes(settings, siteUrl, script, lang)
   const graph: Node[] = [...site.nodes]
-  const lang = settings.general.language
   const webpageId = url
 
   let types: string[] = Array.isArray(opts.pageType) ? opts.pageType : [opts.pageType || 'WebPage']
@@ -109,7 +128,7 @@ export function buildGraph(opts: {
     '@id': webpageId,
     url,
     name: seo.title,
-    isPartOf: { '@id': `${siteUrl}/#website` },
+    isPartOf: { '@id': `${u.home}#website` },
     description: seo.description || undefined,
     inLanguage: lang,
     potentialAction: [{ '@type': 'ReadAction', target: [url] }],
@@ -142,7 +161,7 @@ export function buildGraph(opts: {
 
   if (crumbs?.length && settings.seo.breadcrumbs.enabled) {
     webpage.breadcrumb = { '@id': `${url}#breadcrumb` }
-    graph.push(breadcrumbNode(url, crumbs, siteUrl, post?.seo?.breadcrumbTitle || post?.title || ''))
+    graph.push(breadcrumbNode(url, crumbs, u.link, post?.seo?.breadcrumbTitle || post?.title || ''))
   }
 
   // Article (posts only, unless the article type is "None").
@@ -163,7 +182,7 @@ export function buildGraph(opts: {
       thumbnailUrl: post.image ? abs(siteUrl, post.image.url) : undefined,
       keywords: post.tags.map((t) => t.name),
       articleSection: post.categories.map((c) => c.name),
-      inLanguage: settings.general.language,
+      inLanguage: lang,
       description: seo.description || undefined,
     })
   }
@@ -190,7 +209,7 @@ export function buildGraph(opts: {
   if (opts.listing?.length) {
     webpage.mainEntity = {
       '@type': 'ItemList',
-      itemListElement: opts.listing.map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(siteUrl, p.path), name: p.title })),
+      itemListElement: opts.listing.map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: u.link(p.path), name: p.title })),
     }
   }
 

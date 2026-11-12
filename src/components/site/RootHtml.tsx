@@ -1,13 +1,16 @@
 import type { Metadata, Viewport } from 'next'
 import { getSettings, resolveSiteUrl } from '@/lib/data/settings'
+import { withScript, type Script } from '@/lib/script'
+import { getTranslitConfig, transliterateText } from '@/lib/translit'
 
 /** Applies the saved / system colour scheme before first paint (same as the theme's header.php). */
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('jb-theme');if(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)t='dark';if(t==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}}());`
 
-/** Site-wide head metadata shared by every root layout (public trees and admin). */
-export async function rootMetadata(): Promise<Metadata> {
+/** Site-wide head metadata shared by every root layout (public trees and admin). Latin by default. */
+export async function rootMetadata(script: Script = 'latn'): Promise<Metadata> {
   const settings = await getSettings()
   const siteUrl = resolveSiteUrl(settings)
+  const siteName = script === 'latn' ? settings.general.siteName : transliterateText(settings.general.siteName, script, getTranslitConfig(settings.alphabets))
   const v = settings.seo.verification
   const other: Record<string, string> = {}
   if (v.bing) other['msvalidate.01'] = v.bing
@@ -15,7 +18,7 @@ export async function rootMetadata(): Promise<Metadata> {
   if (v.pinterest) other['p:domain_verify'] = v.pinterest
   return {
     metadataBase: new URL(siteUrl),
-    applicationName: settings.general.siteName,
+    applicationName: siteName,
     icons: settings.general.faviconUrl
       ? { icon: settings.general.faviconUrl, apple: settings.general.faviconUrl }
       : { icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }, { url: '/favicon.ico', sizes: '48x48' }], apple: '/apple-touch-icon.png' },
@@ -25,7 +28,7 @@ export async function rootMetadata(): Promise<Metadata> {
       other: Object.keys(other).length ? other : undefined,
     },
     alternates: {
-      types: { 'application/rss+xml': [{ url: '/feed/', title: `${settings.general.siteName} » Feed` }] },
+      types: { 'application/rss+xml': [{ url: withScript(script, '/feed/'), title: `${siteName} » Feed` }] },
     },
     formatDetection: { telephone: false },
   }

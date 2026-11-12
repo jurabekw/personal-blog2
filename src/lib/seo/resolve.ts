@@ -2,7 +2,8 @@ import 'server-only'
 import type { Metadata } from 'next'
 import type { AllSettings } from '@/lib/settings-defaults'
 import type { PostFull, TermRef } from '@/lib/data/posts'
-import type { Script } from '@/lib/script'
+import { withScript, type Script } from '@/lib/script'
+import { getTranslitConfig, indexNewLatin, transliterateText } from '@/lib/translit'
 import { formatDate } from '@/lib/format'
 import { truncate } from '@/lib/content/text'
 import { replaceVars, type TemplateContext } from './templates'
@@ -18,14 +19,22 @@ export interface SeoInput {
   post?: PostFull
   term?: TermRef
   search?: string
-  /** Alphabet of the page being described (not used by resolution yet; per-alphabet SEO is separate work). */
+  /**
+   * Alphabet of the page being described (default latn). Pass RAW (Latin) post/term data:
+   * resolution runs in Latin and the resulting strings are transliterated once.
+   */
   script?: Script
 }
 
 export interface ResolvedSeo {
+  script: Script
   title: string
   description: string
   canonical: string
+  /** Absolute URL of this page in its alphabet (paged), whether or not it is the canonical. */
+  url: string
+  /** hreflang alternates (latn and cyrl pages only), absolute URLs. */
+  languages?: Record<string, string>
   index: boolean
   follow: boolean
   noimageindex: boolean
@@ -52,7 +61,13 @@ function robotsChoice(choice: string | undefined, typeDefaultNoindex: boolean): 
   return !typeDefaultNoindex
 }
 
+/** Absolute URL of a (paged) path in an alphabet. Identical to the old Latin URL for latn. */
+export function pageUrl(siteUrl: string, script: Script, path: string, page?: number): string {
+  return `${siteUrl}${withScript(script, pagedPath(path, page))}`
+}
+
 export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: string): ResolvedSeo {
+  const script: Script = input.script ?? 'latn'
   const s = settings.seo
   const g = settings.general
   const base: TemplateContext = {
@@ -72,7 +87,9 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
   let noimageindex = false
   let noarchive = false
   let nosnippet = false
-  let canonical = abs(siteUrl, pagedPath(input.path, input.page))
+  const selfLatin = abs(siteUrl, pagedPath(input.path, input.page))
+  const url = pageUrl(siteUrl, script, input.path, input.page)
+  let canonical = selfLatin
   let ogType: 'website' | 'article' = 'website'
   let image: ResolvedSeo['ogImage'] | null = null
   let ogTitle = ''
@@ -153,9 +170,25 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
       break
   }
 
+  // A custom canonical that points somewhere other than this page: Latin keeps it as before;
+  // the generated alphabet versions are noindex, follow with their own canonical (spec §5.2).
+  const customCanonical = !!canonical && canonical !== selfLatin
+  if (script !== 'latn') {
+    if (canonical) canonical = url
+    if (customCanonical) index = false
+    if (script === 'yangi' && !indexNewLatin(settings.alphabets)) index = false
+  }
+
   if (settings.reading.discourageSearchEngines) {
     index = false
     follow = false
+  }
+
+  // hreflang pairs only on indexable, self-canonical Latin and Cyrillic pages; New Latin is never listed.
+  let languages: Record<string, string> | undefined
+  if (script !== 'yangi' && canonical && index && !customCanonical) {
+    const latnUrl = pageUrl(siteUrl, 'latn', input.path, input.page)
+    languages = { 'uz-Latn': latnUrl, 'uz-Cyrl': pageUrl(siteUrl, 'cyrl', input.path, input.page), 'x-default': latnUrl }
   }
 
   const title = replaceVars(titleTpl, ctx) || g.siteName
@@ -171,10 +204,13 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
     image = { url: `${siteUrl}/og/?${q.toString()}`, width: 1200, height: 630, alt: title }
   }
 
-  return {
+  const latin: ResolvedSeo = {
+    script,
     title,
     description,
     canonical,
+    url,
+    ...(languages ? { languages } : {}),
     index,
     follow,
     noimageindex,
@@ -187,6 +223,22 @@ export function resolveSeo(input: SeoInput, settings: AllSettings, siteUrl: stri
     twitterTitle: replaceVars(twitterTitle, ctx) || replaceVars(ogTitle, ctx) || title,
     twitterDescription: replaceVars(twitterDescription, ctx) || replaceVars(ogDescription, ctx) || description,
     twitterImage: twitterImage || image.url,
+  }
+  if (script === 'latn') return latin
+
+  // Templates are resolved in Latin first, then the output is transliterated (separators and
+  // numbers pass through). The /og image URL keeps the Latin title (its fonts are Latin-only).
+  const cfg = getTranslitConfig(settings.alphabets)
+  const tx = (v: string) => (v ? transliterateText(v, script, cfg) : v)
+  return {
+    ...latin,
+    title: tx(latin.title),
+    description: truncate(tx(latin.description), 300),
+    ogTitle: tx(latin.ogTitle),
+    ogDescription: tx(latin.ogDescription),
+    twitterTitle: tx(latin.twitterTitle),
+    twitterDescription: tx(latin.twitterDescription),
+    ogImage: { ...latin.ogImage, ...(latin.ogImage.alt ? { alt: tx(latin.ogImage.alt) } : {}) },
   }
 }
 
@@ -201,12 +253,17 @@ export function toMetadata(r: ResolvedSeo, settings: AllSettings, extra?: { post
     ? '@' + settings.seo.social.twitterUsername.replace(/^@/, '')
     : undefined
   const post = extra?.post
+  const script = r.script ?? 'latn'
+  const cfg = script === 'latn' ? null : getTranslitConfig(settings.alphabets)
+  const tx = (v: string) => (cfg && v ? transliterateText(v, script, cfg) : v)
+  const siteName = tx(settings.general.siteName)
   return {
     title: { absolute: r.title },
     description: r.description || undefined,
     alternates: {
       ...(r.canonical ? { canonical: r.canonical } : {}),
-      types: { 'application/rss+xml': [{ url: '/feed/', title: `${settings.general.siteName} » Feed` }] },
+      ...(r.languages ? { languages: r.languages } : {}),
+      types: { 'application/rss+xml': [{ url: withScript(script, '/feed/'), title: `${siteName} » Feed` }] },
     },
     robots: {
       index: r.index,
@@ -227,7 +284,7 @@ export function toMetadata(r: ResolvedSeo, settings: AllSettings, extra?: { post
     openGraph: {
       type: r.ogType,
       locale: settings.general.locale,
-      siteName: settings.general.siteName,
+      siteName,
       url: r.canonical || undefined,
       title: r.ogTitle,
       description: r.ogDescription || undefined,
@@ -243,9 +300,9 @@ export function toMetadata(r: ResolvedSeo, settings: AllSettings, extra?: { post
         ? {
             publishedTime: post.publishedAt.toISOString(),
             modifiedTime: post.updatedAt.toISOString(),
-            section: post.category?.name,
-            tags: post.tags.map((t) => t.name),
-            authors: [settings.appearance.author.name],
+            section: post.category?.name ? tx(post.category.name) : post.category?.name,
+            tags: post.tags.map((t) => tx(t.name)),
+            authors: [tx(settings.appearance.author.name)],
           }
         : {}),
     },
