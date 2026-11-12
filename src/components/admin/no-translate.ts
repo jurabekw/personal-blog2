@@ -13,16 +13,19 @@ export const NoTranslate = Extension.create({
         attributes: {
           lang: {
             default: null,
+            keepOnSplit: false,
             parseHTML: (el) => el.getAttribute('lang'),
             renderHTML: (attrs) => (attrs.lang ? { lang: attrs.lang } : {}),
           },
           translate: {
             default: null,
+            keepOnSplit: false,
             parseHTML: (el) => el.getAttribute('translate'),
             renderHTML: (attrs) => (attrs.translate ? { translate: attrs.translate } : {}),
           },
           notranslate: {
             default: false,
+            keepOnSplit: false,
             parseHTML: (el) => el.classList.contains('notranslate'),
             renderHTML: (attrs) => (attrs.notranslate ? { class: 'notranslate' } : {}),
           },

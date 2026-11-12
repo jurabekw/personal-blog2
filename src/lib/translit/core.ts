@@ -34,10 +34,11 @@ function shouldKeep(word: string, cfg: TranslitConfig): boolean {
   const lower = word.toLowerCase();
   if (cfg.protectedWords.some((p) => p.toLowerCase() === lower)) return true;
   if (isAllCaps(word)) {
-    // ALL-CAPS: an acronym only with a digit (GA4, B2B) or without any vowel (HTML, PDF, BMT);
-    // JUDA, BEPUL, YANGI are Uzbek words. Protected acronyms (SEO, KPI…) are kept above.
+    // ALL-CAPS: an acronym only with a digit (GA4, B2B) or, for 2+ letters, without any vowel (HTML, BMT);
+    // JUDA, BEPUL, YANGI are Uzbek words and single capitals are initials (M. Karimov, B, V, G).
+    // Protected acronyms (SEO, KPI, FAQ…) are kept above.
     if (/\p{N}/u.test(word)) return true;
-    if (!/[aeiou]/i.test(word)) return true;
+    if (word.replace(/[^\p{L}]/gu, '').length >= 2 && !/[aeiou]/i.test(word)) return true;
   }
   // Internal capital letter (iPhone, YouTube, LinkedIn) → foreign brand.
   if (/\p{Ll}/u.test(word) && /.\p{Lu}/u.test(word)) return true;
@@ -211,8 +212,14 @@ function splitProtected(word: string, cfg: TranslitConfig): [string, string, str
 
 type WordFn = (word: string) => string;
 
+/** Hyphenated all-caps acronym of 1-2 letter parts (E-E-A-T): stays Latin, so single letters in it are not initials. */
+const HYPHEN_ACRONYM = String.raw`(?<![\p{L}\p{N}-])[A-Z]{1,2}(?:-[A-Z]{1,2})+(?![\p{L}\p{N}-])`;
+const PLAIN_RE = new RegExp(`${HYPHEN_ACRONYM}|${WORD_RE.source}`, 'gu');
+const HYPHEN_ACRONYM_FULL = /^[A-Z]{1,2}(?:-[A-Z]{1,2})+$/;
+
 function mapPlain(text: string, cfg: TranslitConfig, fn: WordFn, suffixFn: (suffix: string, stem: string) => string): string {
-  return text.replace(WORD_RE, (word) => {
+  return text.replace(PLAIN_RE, (word) => {
+    if (HYPHEN_ACRONYM_FULL.test(word)) return word;
     const split = splitProtected(word, cfg);
     if (split) return split[0] + split[1] + suffixFn(split[2], split[0]);
     return shouldKeep(word, cfg) ? word : fn(word);

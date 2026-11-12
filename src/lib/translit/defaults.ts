@@ -42,6 +42,9 @@ export const DEFAULT_PROTECTED_WORDS: string[] = [
   'Next', 'React', 'Brandwatch', 'Ahrefs', 'Semrush', 'Figma', 'Notion', 'Excel',
   'SEO', 'GEO', 'AEO', 'SMM', 'CRO', 'UX', 'UI', 'CTR', 'CPC', 'CPA', 'CPM', 'ROI', 'ROAS', 'KPI',
   'CRM', 'CMS', 'API', 'AI', 'PR', 'HTML', 'URL', 'MBA', 'PDF', 'IT', 'SaaS', 'B2B', 'B2C', 'GA4',
+  'FAQ', 'SERP', 'UTM', 'JSON', 'ID', 'IP', 'ERP', 'USP', 'OKR', 'IELTS', 'AMP', 'OTP', 'SEM', 'ROMI',
+  'AOV', 'MAU', 'DAU', 'LTV', 'CAC', 'CPL', 'CTA', 'SLA', 'PNG', 'JPG', 'SVG', 'CSV', 'USD', 'UZS',
+  'EEAT', 'PPC', 'SMS', 'QR', 'NDA', 'MVP', 'CEO', 'CMO', 'CTO', 'HR',
 ];
 
 /** djb2 hash → short hex; good enough to tell dictionary versions apart in cache keys. */

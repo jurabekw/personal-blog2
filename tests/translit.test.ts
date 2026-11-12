@@ -282,3 +282,20 @@ test('opt-out: lang="en", translate="no" and class notranslate keep their conten
     '<p lang="uz">шаҳар</p><p data-lang="en">шаҳар</p><img lang="en" alt="Shop"><p>чой</p>')
   assert.equal(transliterateHtml('<em lang="en">Shopping</em> shahar', 'yangi', cfg), '<em lang="en">Shopping</em> şahar')
 })
+
+// ---- Micro-fix B1/B2 ----
+test('B1: common vowel acronyms stay Latin on Cyrillic pages', () => {
+  assert.equal(toCyrillic('FAQ, SERP, UTM, JSON va ID', cfg), 'FAQ, SERP, UTM, JSON ва ID')
+  const more = ['IP', 'ERP', 'USP', 'OKR', 'IELTS', 'AMP', 'OTP', 'SEM', 'ROMI', 'AOV', 'MAU', 'DAU', 'LTV', 'CAC', 'CPL', 'CTA', 'SLA', 'API', 'PNG', 'JPG', 'SVG', 'CSV', 'PDF', 'USD', 'UZS', 'EEAT', 'PPC', 'SMS', 'QR', 'NDA', 'MVP', 'CEO', 'CMO', 'CTO', 'HR', 'PR', 'AI', 'UI', 'UX']
+  for (const a of more) assert.equal(toCyrillic(`${a} kerak`, cfg), `${a} керак`, a)
+  assert.equal(toCyrillic('E-E-A-T mezoni', cfg), 'E-E-A-T мезони')
+  assert.equal(toNewLatin('E-E-A-T mezoni', cfg), 'E-E-A-T mezoni')
+  assert.equal(toCyrillic('Bu JUDA muhim', cfg), 'Бу ЖУДА муҳим')
+})
+
+test('B2: single capital letters transliterate', () => {
+  assert.equal(toCyrillic('M. Karimov', cfg), 'М. Каримов')
+  assert.equal(toCyrillic("J. Usmonov", cfg), 'Ж. Усмонов')
+  assert.equal(toCyrillic('B, V, G variantlar', cfg), 'Б, В, Г вариантлар')
+  assert.equal(toCyrillic('BMT va TV hamda X5 va WWF', cfg), 'BMT ва TV ҳамда X5 ва WWF')
+})

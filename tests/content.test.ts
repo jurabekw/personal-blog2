@@ -121,3 +121,27 @@ test('sanitizer keeps lang / translate attributes and the notranslate class (opt
   assert.ok(out.includes('<li>z</li>'), out)
   assert.ok(out.includes('<aside class="jb-copy-box notranslate" data-title="T">'), out)
 })
+
+// ---- Micro-fix B4 ----
+test('B4: copy box with extra attributes/classes in any order renders as a copy box', () => {
+  const cfg = DEFAULT_TRANSLIT_CONFIG
+  const plain = renderContent('<aside class="jb-copy-box"><p>x</p></aside>').html
+  const plainTitled = renderContent('<aside class="jb-copy-box" data-title="T"><p>x</p></aside>').html
+  assert.ok(plain.includes('jb-copy-box__head'), plain)
+  const en = renderContent('<aside class="jb-copy-box" lang="en"><p>x</p></aside>').html
+  assert.equal(en, plain.replace('<aside class="jb-copy-box">', '<aside class="jb-copy-box" lang="en">'))
+  const nt = renderContent('<aside class="jb-copy-box notranslate"><p>x</p></aside>').html
+  assert.equal(nt, plain.replace('<aside class="jb-copy-box">', '<aside class="jb-copy-box notranslate">'))
+  const rev = renderContent('<aside lang="en" class="jb-copy-box"><p>x</p></aside>').html
+  assert.equal(rev, plain.replace('<aside class="jb-copy-box">', '<aside class="jb-copy-box" lang="en">'))
+  const titled = renderContent('<aside lang="en" class="jb-copy-box" data-title="T"><p>x</p></aside>').html
+  assert.equal(titled, plainTitled.replace('<aside class="jb-copy-box">', '<aside class="jb-copy-box" lang="en">'))
+  const tn = renderContent('<aside class="jb-copy-box" translate="no"><p>x</p></aside>').html
+  assert.ok(tn.includes('jb-copy-box__head') && tn.includes('translate="no"'), tn)
+
+  const src = '<aside class="jb-copy-box" lang="en"><p>Share this shahar</p></aside><aside class="jb-copy-box"><p>shahar</p></aside>'
+  const cyr = renderContent(transliterateHtml(src, 'cyrl', cfg), { script: 'cyrl', cfg }).html
+  assert.ok(cyr.includes('<div class="jb-copy-box__content"><p>Share this shahar</p></div>'), cyr)
+  assert.ok(cyr.includes('<div class="jb-copy-box__content"><p>шаҳар</p></div>'), cyr)
+  assert.equal((cyr.match(/jb-copy-box__head/g) || []).length, 2)
+})

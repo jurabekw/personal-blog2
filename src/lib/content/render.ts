@@ -158,9 +158,17 @@ export function renderContent(raw: string, opts: RenderOptions = {}): RenderedCo
 
   // Copy boxes.
   html = html.replace(
-    /<aside class="jb-copy-box"(?: data-title="([^"]*)")?>([\s\S]*?)<\/aside>/g,
-    (_m, title: string | undefined, body: string) =>
-      `<aside class="jb-copy-box"><div class="jb-copy-box__head"><strong>${txtHtml(title || 'Maslahat')}</strong><button type="button" class="jb-copy-button" data-label-default="${escapeHtml(copyLabel)}" data-label-success="${escapeHtml(copiedLabel)}">${escapeHtml(copyLabel)}</button></div><div class="jb-copy-box__content">${body}</div><p class="jb-copy-status" role="status" aria-live="polite"></p></aside>`,
+    /<aside\b([^>]*)>([\s\S]*?)<\/aside>/g,
+    (match, attrs: string, body: string) => {
+      const classes = (attr(` ${attrs}`, 'class') ?? '').split(/\s+/).filter(Boolean)
+      if (!classes.includes('jb-copy-box')) return match
+      const title = attr(` ${attrs}`, 'data-title') ?? undefined
+      const cls = ['jb-copy-box', ...classes.filter((c) => c !== 'jb-copy-box')].join(' ')
+      const extra = (attrs.match(/\s[a-zA-Z][\w:-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'))?/g) ?? [])
+        .filter((a) => !/^\s(class|data-title)\s*=/i.test(a))
+        .join('')
+      return `<aside class="${cls}"${extra}><div class="jb-copy-box__head"><strong>${txtHtml(title || 'Maslahat')}</strong><button type="button" class="jb-copy-button" data-label-default="${escapeHtml(copyLabel)}" data-label-success="${escapeHtml(copiedLabel)}">${escapeHtml(copyLabel)}</button></div><div class="jb-copy-box__content">${body}</div><p class="jb-copy-status" role="status" aria-live="polite"></p></aside>`
+    },
   )
 
   // Images: lazy loading, intrinsic size, responsive srcset through the Next.js optimizer.
