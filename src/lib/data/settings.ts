@@ -15,6 +15,7 @@ export const getSettings = cache(async (): Promise<AllSettings> => {
       appearance: mergeDeep(DEFAULT_SETTINGS.appearance, stored.appearance),
       menus: mergeDeep(DEFAULT_SETTINGS.menus, stored.menus),
       seo: mergeDeep(DEFAULT_SETTINGS.seo, stored.seo),
+      alphabets: mergeDeep(DEFAULT_SETTINGS.alphabets, stored.alphabets),
     }
   } catch (error) {
     console.error('[settings] Falling back to defaults:', error)

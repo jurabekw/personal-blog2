@@ -1,3 +1,4 @@
+import type { AlphabetSettings } from '@/lib/translit/types'
 import type { MenuItem, SchemaArticleType, SchemaPageType, SocialLink } from '@/lib/types'
 
 /* ------------------------------------------------------------------ */
@@ -175,6 +176,7 @@ export interface AllSettings {
   appearance: AppearanceSettings
   menus: MenuSettings
   seo: SeoSettings
+  alphabets: AlphabetSettings
 }
 
 export type SettingsKey = keyof AllSettings
@@ -299,6 +301,7 @@ export const DEFAULT_SETTINGS: AllSettings = {
     analytics: { ga4: '', gtm: '', yandexMetrica: '', headCode: '', bodyCode: '' },
     analysisLanguage: 'uz',
   },
+  alphabets: { exceptions: {}, protectedWords: [], indexNewLatin: true },
 }
 
 /** Deep merge stored values over defaults (arrays replace, objects merge). */
