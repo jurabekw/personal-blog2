@@ -41,7 +41,8 @@ export function AlphabetSwitcher({
             <a
               className={`jb-alphabets__link${l.active ? ' is-active' : ''}`}
               href={l.href}
-              hrefLang={HTML_LANG[l.script]}
+              // Özbek (new Latin) shares uz-Latn with O'zbek and has no hreflang alternate of its own.
+              hrefLang={l.script === 'yangi' ? undefined : HTML_LANG[l.script]}
               lang={HTML_LANG[l.script]}
               aria-current={l.active ? 'true' : undefined}
               onClick={() => remember(script, l.script)}

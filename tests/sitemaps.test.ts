@@ -213,3 +213,31 @@ test('search: queries in any alphabet become a current-Latin ILIKE pattern', () 
   assert.equal(searchLikePattern("o'zbek"), '%o_zbek%')
   assert.equal(searchLikePattern('ўзбек'), '%o_zbek%')
 })
+
+test('feed: apostrophe entities in the rendered Latin HTML are transliterated correctly', () => {
+  const p = post({ title: "O'zbek tili", content: '<p>O&#39;zbek va O&rsquo;zbek tili</p>' })
+  const xml = buildFeedXml([p], settings((x) => (x.seo.rss.after = 'Manba: %%POSTLINK%%')), SITE, 'cyrl')
+  assert.ok(xml.includes('Ўзбек ва Ўзбек тили'), xml)
+  // %%POSTLINK%% carries the escaped Latin title (O&#39;zbek) → Ўзбек.
+  assert.ok(xml.includes('>Ўзбек тили</a>'), xml)
+  assert.ok(!xml.includes('&#39;'), xml)
+})
+
+test('robots: default robots.txt disallows the search pages of every alphabet', async () => {
+  const { defaultRobotsTxt } = await import('../src/lib/seo/robots')
+  assert.equal(
+    defaultRobotsTxt(SITE),
+    [
+      'User-agent: *',
+      'Disallow: /admin/',
+      'Disallow: /api/',
+      'Disallow: /search/',
+      'Disallow: /kirill/search/',
+      'Disallow: /yangi/search/',
+      'Allow: /api/legacy-upload/',
+      '',
+      `Sitemap: ${SITE}/sitemap_index.xml`,
+      '',
+    ].join('\n'),
+  )
+})

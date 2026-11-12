@@ -33,7 +33,7 @@
 2. **HTML content with code blocks, links, images and embeds** (YouTube iframes, tables, copy boxes): only text, `alt` and `title` change; `href`, `src`, `class` and `id` don't. → Task 1 test `transliterateHtml leaves markup intact`.
 3. **Internal links on variant pages** (menus, breadcrumbs, cards, pagination, tags, search form, in-content links to `https://www.jurabek.blog/...`) stay inside the alphabet; external, `/admin`, `/uploads` and `/feed` links don't get a prefix. → Task 2 test `withScript`.
 4. **Posts with a custom canonical or noindex in Yoast fields:** the variants follow spec §5.2, and the sitemaps match. → Task 6 test `variant of custom-canonical post is noindex`.
-5. **Unknown paths, redirects and 404s under `/kirill/` and `/yangi/`** give a 404 page in that alphabet; managed redirects still resolve to the Latin target. → Task 4 manual check, plus Task 9 preview check.
+5. **Unknown paths, redirects and 404s under `/kirill/` and `/yangi/`** give a 404 page in that alphabet; managed redirects resolve inside the same alphabet. → Task 4 manual check, plus Task 9 preview check.
 
 ---
 
