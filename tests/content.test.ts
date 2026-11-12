@@ -67,3 +67,57 @@ test('renderContent adds heading ids, TOC data, copy buttons, responsive images 
   assert.ok(html.includes('<div class="jb-table-wrap"><table>'))
   assert.ok(html.includes('<div class="jb-embed"><iframe'))
 })
+
+// ---- Final fix wave: alphabet versions ----
+import { DEFAULT_TRANSLIT_CONFIG } from '../src/lib/translit/defaults'
+import { transliterateHtml } from '../src/lib/translit/html'
+
+test('renderContent on variants: default/custom copy-box titles, fallback TOC title and media alt follow the alphabet', () => {
+  const cfg = DEFAULT_TRANSLIT_CONFIG
+  const src = '<h2>Birinchi</h2><h2>Ikkinchi</h2><p>[jb_article_sections]</p><aside class="jb-copy-box"><p>x</p></aside>' +
+    '<aside class="jb-copy-box" data-title="Shahar"><p>y</p></aside><img src="/uploads/a.jpg">'
+  const media = new Map([['/uploads/a.jpg', { width: 900, height: 600, alt: 'Choy rasmi' }]])
+  const cyr = renderContent(src, { media, script: 'cyrl', cfg }).html
+  assert.ok(cyr.includes('<strong>Маслаҳат</strong>'), cyr)
+  assert.ok(cyr.includes('<strong>Шаҳар</strong>'), cyr)
+  assert.ok(cyr.includes('<p class="jb-toc__title">Мундарижа</p>'), cyr)
+  assert.ok(cyr.includes('aria-label="Мундарижа"'), cyr)
+  assert.ok(cyr.includes('alt="Чой расми"'), cyr)
+  const yangi = renderContent(src, { media, script: 'yangi', cfg }).html
+  assert.ok(yangi.includes('<strong>Şahar</strong>'), yangi)
+  assert.ok(yangi.includes('alt="Çoy rasmi"'), yangi)
+  // Latin output is unchanged.
+  const latn = renderContent(src, { media }).html
+  assert.equal(renderContent(src, { media, script: 'latn', cfg }).html, latn)
+  assert.ok(latn.includes('<strong>Maslahat</strong>') && latn.includes('<strong>Shahar</strong>'))
+  assert.ok(latn.includes('<p class="jb-toc__title">Mundarija</p>') && latn.includes('alt="Choy rasmi"'))
+})
+
+test('Cyrillic page: shortcodes survive transliteration and render (transliterate → render)', () => {
+  const cfg = DEFAULT_TRANSLIT_CONFIG
+  const raw = '<h2>Birinchi</h2><h2>Ikkinchi</h2><p>[jb_article_sections]</p><p>[jb_copy_box title="Prompt"]Shahar haqida[/jb_copy_box]</p>'
+  const { html } = renderContent(transliterateHtml(raw, 'cyrl', cfg), { script: 'cyrl', cfg })
+  assert.ok(html.includes('class="jb-toc jb-toc--card"'), html)
+  assert.ok(html.includes('<strong>Промпт</strong>'), html)
+  assert.ok(html.includes('<div class="jb-copy-box__content"><p>Шаҳар ҳақида</p></div>'), html)
+  assert.ok(!html.includes('[') && !html.includes('жб_'), html)
+})
+
+test('/yangi/ heading ids equal the Latin ids', () => {
+  const cfg = DEFAULT_TRANSLIT_CONFIG
+  const latn = renderContent('<h2>Shahar va choy</h2><h2>O‘zbek tili: g‘alaba</h2><h3>Is\'hoq va ma\'no</h3>')
+  const yangiSrc = transliterateHtml('<h2>Shahar va choy</h2><h2>O‘zbek tili: g‘alaba</h2><h3>Is\'hoq va ma\'no</h3>', 'yangi', cfg)
+  const yangi = renderContent(yangiSrc, { script: 'yangi', cfg })
+  assert.deepEqual(yangi.headings.map((h) => h.id), latn.headings.map((h) => h.id))
+  assert.equal(renderContent('<h2>Şahar va çoy</h2>', { script: 'yangi', cfg }).headings[0].id, 'shahar-va-choy')
+  assert.equal(renderContent('<h2>ŞAHAR ÇOY ÖZ ĞOZ</h2>', { script: 'yangi', cfg }).headings[0].id, 'shahar-choy-oz-goz')
+})
+
+test('sanitizer keeps lang / translate attributes and the notranslate class (opt-out of transliteration)', () => {
+  const out = sanitizeContent('<p lang="en" translate="no">Hi</p><blockquote class="notranslate evil">x</blockquote><em lang="en-US">y</em><li class="other">z</li><aside class="jb-copy-box notranslate" data-title="T">w</aside>')
+  assert.ok(out.includes('<p lang="en" translate="no">Hi</p>'), out)
+  assert.ok(out.includes('<blockquote class="notranslate">x</blockquote>'), out)
+  assert.ok(out.includes('<em lang="en-US">y</em>'), out)
+  assert.ok(out.includes('<li>z</li>'), out)
+  assert.ok(out.includes('<aside class="jb-copy-box notranslate" data-title="T">'), out)
+})

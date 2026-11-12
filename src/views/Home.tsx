@@ -36,7 +36,7 @@ export async function renderHome(script: Script) {
     ? scriptContentLinks(
         renderContent(appearance.homeContent, {
           media: await getMediaInfoForHtml(raw.appearance.homeContent),
-          ...(script === 'latn' ? {} : { copyLabel: t.copy, copiedLabel: t.copied }),
+          ...(script === 'latn' ? {} : { copyLabel: t.copy, copiedLabel: t.copied, script, cfg }),
         }).html,
         script,
         siteUrl,

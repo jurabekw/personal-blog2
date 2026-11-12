@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import type { MediaItem } from '@/lib/admin-types'
 import { MediaPicker, type StorageMode } from './MediaLibrary'
+import { NoTranslate } from './no-translate'
 
 /** The theme's copy box ([jb_copy_box]) as an editable block. */
 const CopyBox = Node.create({
@@ -134,6 +135,7 @@ export function RichEditor({
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Youtube.configure({ nocookie: true, width: 640, height: 360 }),
       CopyBox,
+      NoTranslate,
       CharacterCount,
       Placeholder.configure({ placeholder }),
     ],

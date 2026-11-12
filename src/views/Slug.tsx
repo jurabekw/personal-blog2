@@ -57,7 +57,7 @@ export async function renderSlug(script: Script, { params }: Props) {
   const rendered = renderContent(localized.content, {
     media: await getMediaInfoForHtml(source.content),
     tocTitle: settings.appearance.sidebar.toc.title,
-    ...(script === 'latn' ? {} : { copyLabel: t.copy, copiedLabel: t.copied }),
+    ...(script === 'latn' ? {} : { copyLabel: t.copy, copiedLabel: t.copied, script, cfg }),
   })
   // In-content links to this site stay in the page's alphabet (identity for latn).
   const html = scriptContentLinks(rendered.html, script, siteUrl)

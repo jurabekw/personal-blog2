@@ -2,6 +2,7 @@ import 'server-only'
 import type { Heading } from '@/lib/types'
 import { sanitizeContent } from './sanitize'
 import { decodeEntities, escapeHtml, slugify, stripTags } from './text'
+import { transliterateHtml, transliterateText, type Script, type TranslitConfig } from '@/lib/translit'
 
 export interface MediaInfo {
   width: number | null
@@ -17,6 +18,13 @@ export interface RenderOptions {
   tocTitle?: string
   copyLabel?: string
   copiedLabel?: string
+  /**
+   * Alphabet of the page (with its transliteration config). On cyrl/yangi the labels this function
+   * adds itself — default copy-box title, copy-box titles, fallback TOC title, media-library alt
+   * text — come out in that alphabet, and /yangi/ heading ids equal the Latin ones. Latin: no change.
+   */
+  script?: Script
+  cfg?: TranslitConfig
 }
 
 export interface RenderedContent {
@@ -97,9 +105,19 @@ function renderToc(headings: Heading[], title: string): string {
  * sanitize → shortcodes → heading IDs (for the TOC) → copy boxes → responsive images,
  * scrollable tables and responsive embeds.
  */
+const NEW_LATIN_SLUG: Record<string, string> = { ş: 'sh', ç: 'ch', ö: 'o', ğ: 'g', Ş: 'sh', Ç: 'ch', Ö: 'o', Ğ: 'g' }
+
 export function renderContent(raw: string, opts: RenderOptions = {}): RenderedContent {
   const copyLabel = opts.copyLabel ?? 'Nusxalash'
   const copiedLabel = opts.copiedLabel ?? 'Nusxalandi'
+  const script = opts.cfg && opts.script && opts.script !== 'latn' ? opts.script : null
+  /** Plain text in the page's alphabet (identity on Latin). */
+  const txt = (s: string) => (script && opts.cfg ? transliterateText(s, script, opts.cfg) : s)
+  /** Escaped HTML text in the page's alphabet (identity on Latin). */
+  const txtHtml = (s: string) => (script && opts.cfg ? transliterateHtml(s, script, opts.cfg) : s)
+  // New Latin ş/ç/ö/ğ slug like the sh/ch/oʻ/gʻ they stand for, so /yangi/ anchors equal Latin ones.
+  const headingSlug = (text: string) =>
+    slugify(script === 'yangi' ? text.replace(/[şçöğŞÇÖĞ]/g, (c) => NEW_LATIN_SLUG[c]) : text, 80)
 
   let html = convertCopyBoxShortcodes(raw || '')
   // [jb_article_sections] → placeholder, filled once headings are known.
@@ -124,7 +142,7 @@ export function renderContent(raw: string, opts: RenderOptions = {}): RenderedCo
       headings.push({ id: existing, text, level })
       return match
     }
-    const base = slugify(text, 80) || 'bolim'
+    const base = headingSlug(text) || 'bolim'
     let id = base
     let n = 2
     while (used.has(id)) id = `${base}-${n++}`
@@ -135,14 +153,14 @@ export function renderContent(raw: string, opts: RenderOptions = {}): RenderedCo
 
   // Inline table of contents placeholder(s).
   html = html.replace(/<p>JBTOCPLACEHOLDER([^<]*?)JBEND<\/p>/g, (_m, t: string) =>
-    renderToc(headings, t ? decodeURIComponent(t) : opts.tocTitle || 'Mundarija'),
+    renderToc(headings, txt(t ? decodeURIComponent(t) : opts.tocTitle || 'Mundarija')),
   )
 
   // Copy boxes.
   html = html.replace(
     /<aside class="jb-copy-box"(?: data-title="([^"]*)")?>([\s\S]*?)<\/aside>/g,
     (_m, title: string | undefined, body: string) =>
-      `<aside class="jb-copy-box"><div class="jb-copy-box__head"><strong>${title || 'Maslahat'}</strong><button type="button" class="jb-copy-button" data-label-default="${escapeHtml(copyLabel)}" data-label-success="${escapeHtml(copiedLabel)}">${escapeHtml(copyLabel)}</button></div><div class="jb-copy-box__content">${body}</div><p class="jb-copy-status" role="status" aria-live="polite"></p></aside>`,
+      `<aside class="jb-copy-box"><div class="jb-copy-box__head"><strong>${txtHtml(title || 'Maslahat')}</strong><button type="button" class="jb-copy-button" data-label-default="${escapeHtml(copyLabel)}" data-label-success="${escapeHtml(copiedLabel)}">${escapeHtml(copyLabel)}</button></div><div class="jb-copy-box__content">${body}</div><p class="jb-copy-status" role="status" aria-live="polite"></p></aside>`,
   )
 
   // Images: lazy loading, intrinsic size, responsive srcset through the Next.js optimizer.
@@ -153,7 +171,7 @@ export function renderContent(raw: string, opts: RenderOptions = {}): RenderedCo
     if (info?.width && info?.height && !/\swidth=/i.test(out)) {
       out += ` width="${info.width}" height="${info.height}"`
     }
-    if (info?.alt && !/\salt=/i.test(out)) out += ` alt="${escapeHtml(info.alt)}"`
+    if (info?.alt && !/\salt=/i.test(out)) out += ` alt="${escapeHtml(txt(info.alt))}"`
     if (!/\salt=/i.test(out)) out += ' alt=""'
     if (isOptimizable(src)) {
       const max = info?.width ?? Infinity

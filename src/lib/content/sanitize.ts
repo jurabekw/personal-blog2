@@ -23,6 +23,8 @@ const BASE_OPTIONS: sanitizeHtml.IOptions = {
     'video', 'audio', 'source', 'aside', 'div', 'details', 'summary', 'dl', 'dt', 'dd', 'abbr',
   ],
   allowedAttributes: {
+    // lang="en" / translate="no" mark passages the alphabet versions leave untransliterated.
+    '*': ['lang', 'translate'],
     a: ['href', 'title', 'target', 'rel', 'name', 'id'],
     img: ['src', 'alt', 'title', 'width', 'height'],
     iframe: ['src', 'width', 'height', 'title', 'allow', 'allowfullscreen', 'frameborder', 'loading', 'referrerpolicy'],
@@ -49,6 +51,8 @@ const BASE_OPTIONS: sanitizeHtml.IOptions = {
     q: ['cite'],
   },
   allowedClasses: {
+    // class="notranslate": same opt-out as translate="no".
+    '*': ['notranslate'],
     aside: ['jb-copy-box'],
     figure: ['aligncenter', 'alignleft', 'alignright', 'alignwide', 'alignfull'],
     code: [/^language-[\w-]+$/],
