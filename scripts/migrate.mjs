@@ -10,6 +10,9 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 
+/** Google Analytics 4 measurement ID of jurabek.blog (public: it is sent to every visitor's browser). */
+const GA4_ID = 'G-1R44SWT5LN'
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 // Load .env / .env.local for local runs (Vercel injects env vars itself).
@@ -56,18 +59,55 @@ try {
 
   // Seed: first administrator from env (only when there are no users yet).
   const [{ count: userCount }] = await sql`select count(*)::int as count from users`
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+  const adminPassword = process.env.ADMIN_PASSWORD || ''
   if (userCount === 0) {
-    const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
-    const password = process.env.ADMIN_PASSWORD || ''
-    if (email && password) {
+    if (adminEmail && adminPassword) {
       const bcrypt = (await import('bcryptjs')).default
-      const hash = await bcrypt.hash(password, 12)
-      await sql`insert into users (email, name, password_hash, role) values (${email}, 'Jurabek', ${hash}, 'administrator')`
-      console.log(`[migrate] Created administrator ${email}.`)
+      const hash = await bcrypt.hash(adminPassword, 12)
+      await sql`insert into users (email, name, password_hash, role) values (${adminEmail}, 'Jurabek', ${hash}, 'administrator')`
+      console.log(`[migrate] Created administrator ${adminEmail}.`)
     } else {
       console.log('[migrate] No users yet. Set ADMIN_EMAIL and ADMIN_PASSWORD to create the first administrator.')
     }
+  } else if (adminEmail && adminPassword) {
+    // Credential rotation: when ADMIN_EMAIL / ADMIN_PASSWORD change in the environment, apply them to
+    // the main administrator once. A fingerprint of the applied pair is stored, so a password changed
+    // later in Admin → Profile is not overwritten on every deploy.
+    const crypto = await import('node:crypto')
+    const fingerprint = crypto
+      .createHmac('sha256', process.env.AUTH_SECRET || 'jb-admin-sync')
+      .update(`${adminEmail}\n${adminPassword}`)
+      .digest('hex')
+    const [stored] = await sql`select value from settings where key = 'admin_env_sync'`
+    if (stored?.value?.fingerprint !== fingerprint) {
+      const bcrypt = (await import('bcryptjs')).default
+      const hash = await bcrypt.hash(adminPassword, 12)
+      const [byEmail] = await sql`select id from users where email = ${adminEmail}`
+      const [firstAdmin] = await sql`select id from users where role = 'administrator' order by id limit 1`
+      const target = byEmail || firstAdmin
+      if (target) {
+        // Bumping session_version signs out every existing session of this account.
+        await sql`
+          update users
+          set email = ${adminEmail}, password_hash = ${hash}, role = 'administrator',
+              failed_logins = 0, locked_until = null, session_version = session_version + 1
+          where id = ${target.id}`
+      } else {
+        await sql`insert into users (email, name, password_hash, role) values (${adminEmail}, 'Jurabek', ${hash}, 'administrator')`
+      }
+      await sql`
+        insert into settings (key, value) values ('admin_env_sync', ${JSON.stringify({ fingerprint })}::jsonb)
+        on conflict (key) do update set value = excluded.value`
+      console.log(`[migrate] Applied ADMIN_EMAIL / ADMIN_PASSWORD to administrator ${adminEmail}.`)
+    }
   }
+
+  // Seed: Google Analytics 4 (the same property the WordPress site used) when no ID is stored yet.
+  await sql`
+    update settings
+    set value = jsonb_set(value, '{analytics}', coalesce(value->'analytics', '{}'::jsonb) || ${JSON.stringify({ ga4: GA4_ID })}::jsonb)
+    where key = 'seo' and coalesce(value #>> '{analytics,ga4}', '') = ''`
 
   // Seed: the "Men haqimda" page on a brand-new site (the WordPress importer will overwrite it).
   const [{ count: postCount }] = await sql`select count(*)::int as count from posts`
