@@ -141,15 +141,10 @@ test('parseAlphabetSettings: a list that differs from the defaults is stored as 
   assert.equal(words.ok && words.value.protectedWords.length, DEFAULT_PROTECTED_WORDS.length - 1)
 })
 
-test('parseAlphabetSettings: protected words must be single tokens', () => {
-  for (const bad of ['Google Ads', 'Search\tConsole']) {
-    const r = parseAlphabetSettings(form([], `SEO\n${bad}`))
-    assert.equal(r.ok, false, `${bad} should be rejected`)
-    if (r.ok) continue
-    assert.equal(r.field, 'protectedWords')
-    assert.equal(r.row, 2)
-    assert.match(r.error, /bitta soʻz/)
-  }
+test('parseAlphabetSettings: a protected entry may be an exact phrase; inner whitespace collapses to one space', () => {
+  const r = parseAlphabetSettings(form([], 'SEO\nGoogle Ads\nSearch\t Console'))
+  assert.equal(r.ok, true)
+  if (r.ok) assert.deepEqual(r.value.protectedWords, ['SEO', 'Google Ads', 'Search Console'])
   const ok = parseAlphabetSettings(form([], "Next.js\nChatGPT\nO'zbekiston\nB2B"))
   assert.equal(ok.ok, true)
 })

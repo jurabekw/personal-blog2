@@ -163,7 +163,7 @@ export function AlphabetSettingsSection({ initial, defaults }: { initial: Alphab
                     value={words}
                     onChange={(e) => setWords(e.target.value)}
                   />
-                  <div className="wpa-help">Har qatorda bitta soʻz. Bu soʻzlar kirill va yangi lotin sahifalarida ham oʻzgarmaydi (brendlar, qisqartmalar).</div>
+                  <div className="wpa-help">Har qatorda bitta soʻz yoki aniq ibora (masalan, This Is Marketing). Bular kirill va yangi lotin sahifalarida ham oʻzgarmaydi (brendlar, kurs va kitob nomlari, qisqartmalar).</div>
                 </td>
               </tr>
               <tr>

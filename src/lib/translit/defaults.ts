@@ -32,19 +32,31 @@ export const DEFAULT_EXCEPTIONS: Record<string, string> = {
   konsepsiya: 'концепция',
   reaksiya: 'реакция',
   tendensiya: 'тенденция',
+  digital: 'диджитал',
 };
 
 /** Words that always stay in Latin, even on Cyrillic pages. */
 export const DEFAULT_PROTECTED_WORDS: string[] = [
   'Google', 'Ads', 'Analytics', 'Search', 'Console', 'Meta', 'Facebook', 'Instagram', 'Telegram',
   'YouTube', 'TikTok', 'LinkedIn', 'ChatGPT', 'OpenAI', 'Claude', 'Anthropic', 'Gemini', 'Chrome',
-  'Yandex', 'Metrika', 'Wordstat', 'Hamkorbank', 'WordPress', 'Elementor', 'Yoast', 'Vercel',
+  'Yandex', 'Wordstat', 'Hamkorbank', 'WordPress', 'Elementor', 'Yoast', 'Vercel',
   'Next', 'React', 'Brandwatch', 'Ahrefs', 'Semrush', 'Figma', 'Notion', 'Excel',
   'SEO', 'GEO', 'AEO', 'SMM', 'CRO', 'UX', 'UI', 'CTR', 'CPC', 'CPA', 'CPM', 'ROI', 'ROAS', 'KPI',
   'CRM', 'CMS', 'API', 'AI', 'PR', 'HTML', 'URL', 'MBA', 'PDF', 'IT', 'SaaS', 'B2B', 'B2C', 'GA4',
   'FAQ', 'SERP', 'UTM', 'JSON', 'ID', 'IP', 'ERP', 'USP', 'OKR', 'IELTS', 'AMP', 'OTP', 'SEM', 'ROMI',
   'AOV', 'MAU', 'DAU', 'LTV', 'CAC', 'CPL', 'CTA', 'SLA', 'PNG', 'JPG', 'SVG', 'CSV', 'USD', 'UZS',
   'EEAT', 'PPC', 'SMS', 'QR', 'NDA', 'MVP', 'CEO', 'CMO', 'CTO', 'HR',
+  'AMA', 'FTC', 'MIT', 'ZIP', 'ER', 'NPS', 'MCP',
+  // Courses, platforms, plans and product UI names quoted in the posts.
+  'Skillshop', 'Blueprint', 'Academy', 'Coursera', 'OpenStax', 'Wharton', 'Bitrix24', 'amoCRM', 'Uzbekistan',
+  'Bain', 'Pro', 'Max', 'Team', 'Enterprise', 'Desktop', 'Skill', 'Skills', 'Plugin', 'Plugins', 'Settings',
+  'Install', 'Releases', 'Display', 'Shopping', 'Sheets', 'Drive', 'Email', 'Lead', 'Churn', 'Retention',
+  'engagement', 'rate', 'reach', 'engine', 'impressions', 'Friday',
+  // Authors and books.
+  'Philip', 'Kotler', 'Gary', 'Armstrong', 'Seth', 'Godin', 'Robert', 'Cialdini', 'Corey', 'Haines',
+  // Exact phrases (kept only when written exactly like this).
+  'This Is Marketing', 'Uzum Market', 'Rice University', 'Federal Trade Commission', 'Black Friday',
+  'Model Context Protocol', 'Create skill', 'Upload a skill', 'Browse plugins', 'Manage connectors',
 ];
 
 /** djb2 hash → short hex; good enough to tell dictionary versions apart in cache keys. */

@@ -49,17 +49,10 @@ export function parseAlphabetSettings(formData: FormData, clean: (s: string) => 
   const seen = new Set<string>()
   const lines = str(formData.get('protectedWords')).split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
-    const word = lines[i].trim()
+    // An entry with spaces is an exact phrase ("This Is Marketing"); inner whitespace becomes one space.
+    const word = lines[i].trim().replace(/\s+/gu, ' ')
     if (!word || seen.has(word.toLowerCase())) continue
     if (word.length > MAX_LEN) return { ok: false, field: 'protectedWords', error: `“${word.slice(0, 30)}…” juda uzun (${MAX_LEN} belgidan oshmasin).` }
-    if (/\s/u.test(word)) {
-      return {
-        ok: false,
-        field: 'protectedWords',
-        row: i + 1,
-        error: `${i + 1}-qator: “${word}” bitta soʻz boʻlishi kerak (boʻshliqsiz). Har bir soʻzni alohida qatorga yozing.`,
-      }
-    }
     seen.add(word.toLowerCase())
     protectedWords.push(word)
   }

@@ -1,4 +1,4 @@
-import { transliterateText } from './core';
+import { AMP, transliterateText, type TextOptions } from './core';
 import type { Script, TranslitConfig } from './types';
 
 const TOKEN_RE = /(<!--[\s\S]*?-->|<[^>]+>)/;
@@ -17,11 +17,21 @@ function decodeApostrophes(text: string): string {
     .replace(/&(?:#0*8217|#x0*2019|rsquo);/gi, '’');
 }
 
-function plainSegment(text: string, script: Script, cfg: TranslitConfig): string {
+function plainSegment(text: string, script: Script, cfg: TranslitConfig, opts: TextOptions = {}): string {
   return decodeApostrophes(text)
+    .replace(/&amp;/g, AMP)
     .split(ENTITY_RE)
-    .map((part, i) => (i % 2 === 1 ? part : transliterateText(part, script, cfg)))
-    .join('');
+    .map((part, i) => (i % 2 === 1 ? part : transliterateText(part, script, cfg, opts)))
+    .join('')
+    .replace(/\uE000/g, '&amp;');
+}
+
+/** Does this <a> tag link to another site? Its text is then a source title (Google Skillshop). */
+function isExternalLink(tag: string): boolean {
+  const m = /\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(tag);
+  const href = (m?.[1] ?? m?.[2] ?? m?.[3] ?? '').trim();
+  const host = /^(?:https?:)?\/\/([^/?#:]+)/i.exec(href)?.[1]?.toLowerCase();
+  return !!host && host !== 'jurabek.blog' && !host.endsWith('.jurabek.blog');
 }
 
 /** Shortcode token: tag and attribute names stay; only the title value is transliterated. */
@@ -34,11 +44,11 @@ function shortcodeSegment(code: string, script: Script, cfg: TranslitConfig): st
   });
 }
 
-function textSegment(text: string, script: Script, cfg: TranslitConfig): string {
-  if (!text.includes('[')) return plainSegment(text, script, cfg);
+function textSegment(text: string, script: Script, cfg: TranslitConfig, opts: TextOptions = {}): string {
+  if (!text.includes('[')) return plainSegment(text, script, cfg, opts);
   return text
     .split(SHORTCODE_RE)
-    .map((part, i) => (i % 2 === 1 ? shortcodeSegment(part, script, cfg) : plainSegment(part, script, cfg)))
+    .map((part, i) => (i % 2 === 1 ? shortcodeSegment(part, script, cfg) : plainSegment(part, script, cfg, opts)))
     .join('');
 }
 
@@ -68,16 +78,28 @@ export function transliterateHtml(html: string, script: Script, cfg: TranslitCon
   let skip = 0;
   /** Open opt-out element: its tag name and how many same-name elements are open inside it. */
   let optOut: { name: string; depth: number } | null = null;
+  /** Nesting depth of <a> elements that link to other sites. */
+  let extLink = 0;
+  let linkDepth = 0;
   return html
     .split(TOKEN_RE)
     .map((seg, i) => {
-      if (i % 2 === 0) return skip > 0 || optOut ? seg : textSegment(seg, script, cfg);
+      if (i % 2 === 0) return skip > 0 || optOut ? seg : textSegment(seg, script, cfg, { source: extLink > 0 });
       if (seg.startsWith('<!--')) return seg;
       const m = /^<(\/?)([a-zA-Z][a-zA-Z0-9]*)/.exec(seg);
       if (!m) return seg;
       const closing = !!m[1];
       const name = m[2].toLowerCase();
       const selfClosing = seg.endsWith('/>') || VOID_TAGS.has(name);
+      if (name === 'a' && !selfClosing) {
+        if (closing) {
+          linkDepth = Math.max(0, linkDepth - 1);
+          if (extLink > linkDepth) extLink = linkDepth;
+        } else {
+          linkDepth++;
+          if (isExternalLink(seg)) extLink = linkDepth;
+        }
+      }
       if (optOut) {
         if (name === optOut.name && !selfClosing) {
           optOut.depth += closing ? -1 : 1;

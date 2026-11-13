@@ -299,3 +299,79 @@ test('B2: single capital letters transliterate', () => {
   assert.equal(toCyrillic('B, V, G variantlar', cfg), 'Б, В, Г вариантлар')
   assert.equal(toCyrillic('BMT va TV hamda X5 va WWF', cfg), 'BMT ва TV ҳамда X5 ва WWF')
 })
+
+// Source, brand and product names keep their original spelling on Cyrillic / new-Latin pages.
+const ext = (href: string, text: string) => `<p><a href="${href}" target="_blank">${text}</a></p>`
+
+test('names: a brand starts a run of capitalized names (Google Skillshop, Meta Ads Manager)', () => {
+  assert.equal(toCyrillic('Google Skillshop kursi', cfg), 'Google Skillshop курси');
+  assert.equal(toCyrillic('Meta Blueprint va Meta Ads Manager’dagi hisobot', cfg), 'Meta Blueprint ва Meta Ads Manager’даги ҳисобот');
+  assert.equal(toCyrillic('Yandex Metrika va Google Sheets jadvali', cfg), 'Yandex Metrika ва Google Sheets жадвали');
+  assert.equal(toCyrillic('HubSpot Academy, Semrush Academy', cfg), 'HubSpot Academy, Semrush Academy');
+  assert.equal(toCyrillic('Claude Desktop’da ishlaydi', cfg), 'Claude Desktop’да ишлайди');
+  assert.equal(toNewLatin('Google Skillshop kursi', cfg), 'Google Skillshop kursi');
+});
+
+test('names: English joiners inside a name run (Principles of Marketing, Introduction to Marketing)', () => {
+  assert.equal(toCyrillic('Principles of Marketing darsligi', cfg), 'Principles of Marketing дарслиги');
+  assert.equal(toCyrillic("Coursera'dagi Introduction to Marketing kursi", cfg), "Coursera'даги Introduction to Marketing курси");
+  assert.equal(toCyrillic('FTC’ning Advertising and Marketing Basics qo‘llanmasi', cfg), 'FTC’нинг Advertising and Marketing Basics қўлланмаси');
+  assert.equal(toCyrillic('Rice University bilan', cfg), 'Rice University билан');
+});
+
+test('names: a run does not swallow Uzbek words after a brand', () => {
+  assert.equal(toCyrillic('Instagram O‘zbekistonda mashhur', cfg), 'Instagram Ўзбекистонда машҳур');
+  assert.equal(toCyrillic('Google. Keyin Qidiruv', cfg), 'Google. Кейин Қидирув');
+  assert.equal(toCyrillic('Google Ads yordam markazi', cfg), 'Google Ads ёрдам маркази');
+  assert.equal(toCyrillic('Uzum Market kabi', cfg), 'Uzum Market каби');
+});
+
+test('names: authors, books and product terms from the posts stay Latin', () => {
+  assert.equal(toCyrillic('Philip Kotler va Gary Armstrong', cfg), 'Philip Kotler ва Gary Armstrong');
+  assert.equal(toCyrillic('Seth Godin — This Is Marketing.', cfg), 'Seth Godin — This Is Marketing.');
+  assert.equal(toCyrillic('Robert Cialdini — Influence.', cfg), 'Robert Cialdini — Influence.');
+  assert.equal(toCyrillic('Pro, Max, Team va Enterprise', cfg), 'Pro, Max, Team ва Enterprise');
+  assert.equal(toCyrillic('Customize → Skills → Create skill → Upload a skill yo‘li', cfg), 'Customize → Skills → Create skill → Upload a skill йўли');
+  assert.equal(toCyrillic('Black Friday, Bitrix24, amoCRM, MIT litsenziyasi, ZIP fayl', cfg), 'Black Friday, Bitrix24, amoCRM, MIT лицензияси, ZIP файл');
+  assert.equal(toCyrillic('(engagement rate, ER) va (reach)', cfg), '(engagement rate, ER) ва (reach)');
+  assert.equal(toCyrillic('search engine optimization', cfg), 'search engine optimization');
+});
+
+test('names: metrika is an Uzbek word; only Yandex Metrika stays Latin', () => {
+  assert.equal(toCyrillic('Metrikalarning ro‘yxati, metrika', cfg), 'Метрикаларнинг рўйхати, метрика');
+});
+
+test('names: Name + apostrophe + suffix keeps the name, Uzbek stems lose the apostrophe', () => {
+  assert.equal(toCyrillic('Corey Haines’ning to‘plami', cfg), 'Corey Haines’нинг тўплами');
+  assert.equal(toCyrillic('Market’da', cfg), 'Market’да');
+  assert.equal(toCyrillic("Najot Ta'lim'ning kursi", cfg), 'Нажот Таълимнинг курси');
+  assert.equal(toCyrillic("bog'da, Do‘konda, ma’lumot", cfg), 'боғда, Дўконда, маълумот');
+});
+
+test('names: AQSh is an Uzbek abbreviation, digital gets its Cyrillic spelling', () => {
+  assert.equal(toCyrillic('AQSh va Digital marketing', cfg), 'АҚШ ва Диджитал маркетинг');
+});
+
+test('names: capitalized title in an external link stays as the source wrote it', () => {
+  assert.equal(
+    transliterateHtml(ext('https://datareportal.com/x', 'Digital 2026: Uzbekistan hisoboti'), 'cyrl', cfg),
+    ext('https://datareportal.com/x', 'Digital 2026: Uzbekistan ҳисоботи'),
+  );
+  assert.equal(
+    transliterateHtml(ext('https://nps.bain.com/', 'Bain &amp; Company'), 'cyrl', cfg),
+    ext('https://nps.bain.com/', 'Bain &amp; Company'),
+  );
+  assert.equal(
+    transliterateHtml(ext('https://najottalim.uz/', "Najot Ta'lim'ning SMM Pro kursi"), 'cyrl', cfg),
+    ext('https://najottalim.uz/', "Najot Ta'lim'нинг SMM Pro курси"),
+  );
+  assert.equal(
+    transliterateHtml(ext('https://lex.uz/x', '«Reklama to’g’risida»gi Qonun'), 'cyrl', cfg),
+    ext('https://lex.uz/x', '«Реклама тўғрисида»ги Қонун'),
+  );
+  // Internal links are ordinary text.
+  assert.equal(
+    transliterateHtml('<a href="/kirill/seo/">Digital 2026: Hisobot</a>', 'cyrl', cfg),
+    '<a href="/kirill/seo/">Диджитал 2026: Ҳисобот</a>',
+  );
+});
